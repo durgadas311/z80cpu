@@ -9,7 +9,7 @@ package z80core;
  *
  * @author jsanchez
  */
-public interface MemIoOps {
+public interface Computer {
 	int fetchOpcode(int address);
 
 	int peek8(int address);
@@ -21,4 +21,7 @@ public interface MemIoOps {
 	void outPort(int port, int value);
 
 	void contendedStates(int address, int tstates);
+
+	void breakpoint();
+	void execDone();
 }
