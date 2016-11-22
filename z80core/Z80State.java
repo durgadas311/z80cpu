@@ -4,13 +4,15 @@
  */
 package z80core;
 
-import z80core.Z80.IntMode;
-
 /**
  *
  * @author jsanchez
  */
 public class Z80State {
+    // Modos de interrupción
+    // Interrupt Modes
+    public enum IntMode { IM0, IM1, IM2 };
+
     // Acumulador y resto de registros de 8 bits
     private int regA, regB, regC, regD, regE, regH, regL;
     // Flags sIGN, zERO, 5, hALFCARRY, 3, pARITY y ADDSUB (n), carryFlag
