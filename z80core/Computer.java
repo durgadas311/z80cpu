@@ -12,12 +12,9 @@ import z80core.Z80State.IntMode;
  * @author jsanchez
  */
 public interface Computer {
-	int fetchOpcode(int address);
 
 	int peek8(int address);
 	void poke8(int address, int value);
-	int peek16(int address);
-	void poke16(int address, int word);
 
 	// fetch Interrupt Response byte, IM0 (instruction bytes) or IM2 (vector).
 	// Implementation must keep track of multi-byte instruction sequence,
