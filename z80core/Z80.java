@@ -2000,10 +2000,8 @@ public class Z80 {
 				byte offset = (byte) fetch8();
 				if ((sz5h3pnFlags & ZERO_MASK) == 0) {
 					computerImpl.contendedStates(regPC, 5);
-					regPC += offset;
-					memptr = regPC;
+					regPC = memptr = (regPC + offset) & 0xffff;
 				}
-				regPC = (regPC + 1) & 0xffff;
 				break;
 			}
 			case 0x21: {     /* LD HL,nn */
@@ -2040,8 +2038,7 @@ public class Z80 {
 				byte offset = (byte) fetch8();
 				if ((sz5h3pnFlags & ZERO_MASK) != 0) {
 					computerImpl.contendedStates(regPC, 5);
-					regPC += offset;
-					memptr = regPC;
+					regPC = memptr = (regPC + offset) & 0xffff;
 				}
 				break;
 			}
@@ -2084,8 +2081,7 @@ public class Z80 {
 				byte offset = (byte) fetch8();
 				if (!carryFlag) {
 					computerImpl.contendedStates(regPC, 5);
-					regPC += offset;
-					memptr = regPC;
+					regPC = memptr = (regPC + offset) & 0xffff;
 				}
 				break;
 			}
@@ -2133,8 +2129,7 @@ public class Z80 {
 				byte offset = (byte) fetch8();
 				if (carryFlag) {
 					computerImpl.contendedStates(regPC, 5);
-					regPC += offset;
-					memptr = regPC;
+					regPC = memptr = (regPC + offset) & 0xffff;
 				}
 				break;
 			}
@@ -6331,5 +6326,22 @@ public class Z80 {
 				break;
 			}
 		}
+	}
+
+	public String dumpDebug() {
+		String s = new String();
+		s += String.format("PC=%04x SP=%04x\n", regPC, regSP);
+		s += String.format("HL=%04x DE=%04x BC=%04x\n", getRegHL(), getRegDE(), getRegBC());
+		s += String.format("A=%02x F=%s%s%s%s%s%s%s%s\n", regA,
+			(sz5h3pnFlags & SIGN_MASK) == 0 ? "s" : "S",
+			(sz5h3pnFlags & ZERO_MASK) == 0 ? "z" : "Z",
+			(sz5h3pnFlags & BIT5_MASK) == 0 ? "." : "5",
+			(sz5h3pnFlags & HALFCARRY_MASK) == 0 ? "h" : "H",
+			(sz5h3pnFlags & BIT3_MASK) == 0 ? "." : "3",
+			(sz5h3pnFlags & PARITY_MASK) == 0 ? "p" : "P",
+			(sz5h3pnFlags & ADDSUB_MASK) == 0 ? "n" : "N",
+			carryFlag ? "c" : "C"
+			);
+		return s;
 	}
 }
