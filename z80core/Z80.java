@@ -8,6 +8,31 @@
 //		la estructura del microprocesador Z80 y la ejecuci�n de todas
 //		las instrucciones del repertorio del mismo.
 //-----------------------------------------------------------------------------
+// Dec 2016
+// Modified from original version.
+//
+// Major change was to add int intrResp(IntMode mode) in order to implement
+// interrupt modes 0 and 2. This allows the computer implementation, and
+// associated I/O devices, to participate in interrupt vector/instruction
+// generation.
+//
+// This included moving the IntMode enum into Z80State, and changing the way
+// instruction bytes are fetched compared to data bytes (e.g. the opcode and
+// address for "lhld 1234" are fetched via a different path from the contents
+// of (1234)). This allows the instruction fetch to be diverted temporarely to
+// intrResp() while servicing an interrupt. Also, incrementing PC was moved
+// into this fetch path so that the PC does not change while fetching the
+// interrupt instruction. Should work for multi-byte instructions, but only
+// tested on single-byte.
+//
+// Also fixed some T-state counts that were incorrect.
+//
+// In addition, removed read/write of 16-bit words from the computer interface.
+// The real CPU only fetches bytes, so "knowledge" of endianess needs
+// to be in the CPU, not the computer implementation.
+//
+// Douglas Miller <durgadas311@gmail.com>
+//
 /*
  * Versión: 2.0
  * Autor:   José Luis Sánchez Villanueva

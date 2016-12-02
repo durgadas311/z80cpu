@@ -1,7 +1,11 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
+// Dec 2016
+// Modified from Alberto Sánchez Terrén original code.
+//
+// Move IntMode enum from Z80 to Z80State since it is needed both places
+// and for computer interface.
+//
+// Douglas Miller <durgadas311@gmail.com>
+
 package z80core;
 
 /**

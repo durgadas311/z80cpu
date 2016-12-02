@@ -1,7 +1,12 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
+// Dec 2016
+// Renamed/merged/modified interfaces from Alberto Sánchez Terrén original code.
+//
+// Major change was to add int intrResp(IntMode mode) in order to implement
+// interrupt modes 0 and 2. This allows the computer implementation, and
+// associated I/O devices, to participate in interrupt vector/instruction
+// generation.
+//
+// Douglas Miller <durgadas311@gmail.com>
 
 package z80core;
 
