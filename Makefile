@@ -1,6 +1,6 @@
 all: z80core.jar
 
-z80core.jar:
+z80core.jar: z80core/*.java
 	javac z80core/*.java
 	jar -cf z80core.jar z80core/*.class
 
