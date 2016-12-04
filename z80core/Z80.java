@@ -1818,7 +1818,7 @@ public class Z80 {
 		Arrays.fill(breakpointAt, false);
 	}
 
-	public final void execute() {
+	public final int execute() {
 		ticks = 0;
 		// Primero se comprueba NMI
 		if (activeNMI) {
@@ -1858,7 +1858,7 @@ public class Z80 {
 			computerImpl.execDone();
 		}
 		intrFetch = false;
-		computerImpl.contendedStates(0, ticks);
+		return ticks;
 	}
 
 	public final void execute(int limit) {
