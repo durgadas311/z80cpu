@@ -1861,6 +1861,52 @@ public class Z80 {
 		computerImpl.contendedStates(0, ticks);
 	}
 
+	public final void execute(int limit) {
+		while (limit > 0) {
+			ticks = 0;
+			// Primero se comprueba NMI
+			if (activeNMI) {
+				activeNMI = false;
+				lastFlagQ = false;
+				nmi();
+			}
+
+			// Ahora se comprueba si al final de la instrucción anterior se
+			// encontró una interrupción enmascarable y, de ser así, se procesa.
+			if (activeINT) {
+				if (ffIFF1 && !pendingEI) {
+					lastFlagQ = false;
+					interruption();
+				}
+			}
+
+			if (breakpointAt[regPC]) {
+				computerImpl.breakpoint();
+			}
+
+			opCode = fetchOpcode();
+
+			flagQ = false;
+
+			decodeOpcode(opCode);
+
+			lastFlagQ = flagQ;
+
+			// Si está pendiente la activación de la interrupciones y el
+			// código que se acaba de ejecutar no es el propio EI
+			if (pendingEI && opCode != 0xFB) {
+				pendingEI = false;
+			}
+
+			if (execDone) {
+				computerImpl.execDone();
+			}
+			intrFetch = false;
+			computerImpl.contendedStates(0, ticks);
+			limit -= ticks;
+		}
+	}
+
 	private void decodeOpcode(int opCode) {
 
 		switch (opCode) {
