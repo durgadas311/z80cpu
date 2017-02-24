@@ -6053,6 +6053,7 @@ public class Z80 {
 			case 0x7D: {     /* RETN */
 				ffIFF1 = ffIFF2;
 				regPC = memptr = pop();
+				computerImpl.retIntr(opCode);
 				break;
 			}
 			case 0x46:

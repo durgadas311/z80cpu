@@ -25,6 +25,7 @@ public interface Computer {
 	// Implementation must keep track of multi-byte instruction sequence,
 	// and other possible state. For IM0, Z80 will call as long as 'intrFetch' is true.
 	int intrResp(IntMode mode);
+	void retIntr(int opCode);
 
 	int inPort(int port);
 	void outPort(int port, int value);
