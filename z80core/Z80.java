@@ -6394,7 +6394,9 @@ public class Z80 {
 
 	public String dumpDebug() {
 		String s = new String();
-		s += String.format("PC=%04x SP=%04x\n", regPC, regSP);
+		s += String.format("PC=%04x SP=%04x R=%02x I=%02x\n",
+				getRegPC(), getRegSP(), getRegR(), getRegI());
+		s += String.format("IX=%04x IY=%04x\n", getRegIX(), getRegIY());
 		s += String.format("HL=%04x DE=%04x BC=%04x\n", getRegHL(), getRegDE(), getRegBC());
 		s += String.format("A=%02x F=%s%s%s%s%s%s%s%s\n", regA,
 			(sz5h3pnFlags & SIGN_MASK) == 0 ? "s" : "S",
@@ -6405,6 +6407,17 @@ public class Z80 {
 			(sz5h3pnFlags & PARITY_MASK) == 0 ? "p" : "P",
 			(sz5h3pnFlags & ADDSUB_MASK) == 0 ? "n" : "N",
 			carryFlag ? "c" : "C"
+			);
+		s += String.format("HL'=%04x DE'=%04x BC'=%04x\n", getRegHLx(), getRegDEx(), getRegBCx());
+		s += String.format("A'=%02x F'=%s%s%s%s%s%s%s%s\n", regAx,
+			(regFx & SIGN_MASK) == 0 ? "s" : "S",
+			(regFx & ZERO_MASK) == 0 ? "z" : "Z",
+			(regFx & BIT5_MASK) == 0 ? "." : "5",
+			(regFx & HALFCARRY_MASK) == 0 ? "h" : "H",
+			(regFx & BIT3_MASK) == 0 ? "." : "3",
+			(regFx & PARITY_MASK) == 0 ? "p" : "P",
+			(regFx & ADDSUB_MASK) == 0 ? "n" : "N",
+			(regFx & CARRY_MASK) == 0 ? "c" : "C"
 			);
 		return s;
 	}
