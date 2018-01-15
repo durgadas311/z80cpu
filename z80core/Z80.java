@@ -6394,6 +6394,8 @@ public class Z80 {
 
 	public String dumpDebug() {
 		String s = new String();
+		s += String.format("INT=%s NMI=%s mode=%s IFF1=%s IFF2=%s\n",
+				isINTLine(), isNMI(), getIM().name(), isIFF1(), isIFF2());
 		s += String.format("PC=%04x SP=%04x R=%02x I=%02x\n",
 				getRegPC(), getRegSP(), getRegR(), getRegI());
 		s += String.format("IX=%04x IY=%04x\n", getRegIX(), getRegIY());
