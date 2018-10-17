@@ -161,7 +161,7 @@ package z80core;
 import java.util.Arrays;
 import z80core.Z80State.IntMode;
 
-public class Z80 {
+public class Z80 implements CPU {
 
 	private final Computer computerImpl;
 	private int ticks;
@@ -778,6 +778,8 @@ public class Z80 {
 
 		carryFlag = (regF & CARRY_MASK) != 0;
 	}
+
+	public boolean isIE() { return isIFF2(); }
 
 	// Acceso a los flip-flops de interrupción
 	public final boolean isIFF1() {
