@@ -1827,6 +1827,7 @@ public class Z80 implements CPU {
 			activeNMI = false;
 			lastFlagQ = false;
 			nmi();
+			return -ticks;
 		}
 
 		// Ahora se comprueba si al final de la instrucción anterior se
@@ -1835,6 +1836,9 @@ public class Z80 implements CPU {
 			if (ffIFF1 && !pendingEI) {
 				lastFlagQ = false;
 				interruption();
+				if (!intrFetch) {
+					return -ticks;
+				}
 			}
 		}
 
@@ -1842,7 +1846,7 @@ public class Z80 implements CPU {
 			computerImpl.breakpoint();
 		}
 
-		opCode = fetchOpcode();
+		opCode = fetchOpcode();	// this may be fetching interrupt instruction
 
 		flagQ = false;
 
@@ -1858,6 +1862,9 @@ public class Z80 implements CPU {
 
 		if (execDone) {
 			computerImpl.execDone();
+		}
+		if (intrFetch) {
+			ticks = -ticks;
 		}
 		intrFetch = false;
 		return ticks;

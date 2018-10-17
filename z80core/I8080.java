@@ -947,6 +947,7 @@ public class I8080 implements CPU {
 			if (ffIE && !pendingEI) {
 				lastFlagQ = false;
 				interruption();
+				// intrFetch is always true
 			}
 		}
 
@@ -954,7 +955,7 @@ public class I8080 implements CPU {
 			computerImpl.breakpoint();
 		}
 
-		opCode = fetchOpcode();
+		opCode = fetchOpcode();	// this may be fetching interrupt instruction
 
 		flagQ = false;
 
@@ -970,6 +971,9 @@ public class I8080 implements CPU {
 
 		if (execDone) {
 			computerImpl.execDone();
+		}
+		if (intrFetch) {
+			ticks = -ticks;
 		}
 		intrFetch = false;
 		return ticks;
