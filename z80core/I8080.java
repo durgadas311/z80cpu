@@ -492,7 +492,7 @@ public class I8080 implements CPU {
 	}
 
 	// Reset
-	// TODO: confirm details with official documentation
+	// TODO: only PC should be cleared, and ffIE set.
 	public final void reset() {
 		if (pinReset) {
 			pinReset = false;
@@ -921,6 +921,8 @@ public class I8080 implements CPU {
 		ffIE = false;
 		// total: 2+N t-states
 		intrFetch = true;
+		// TODO: i8080 can only fetch a single byte,
+		// behavior unknown if not a single-byte instruction.
 		ticks += 2; // 2 WAIT states added by INTR ACK initial M1
 		memptr = regPC;
 		//System.out.println(String.format("Coste INT: %d", tEstados-tmp));
