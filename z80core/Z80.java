@@ -6244,17 +6244,22 @@ public class Z80 implements CPU {
 				rld();
 				break;
 			}
-			case 0x70: {     /* IN (C) */
+			case 0x70: {     /* IN F,(C) */
 				memptr = getRegBC();
 				int inPort = computerImpl.inPort(memptr++);
 				ticks += 4;
-				sz5h3pnFlags = sz53pn_addTable[inPort];
+				// TODO: unclear if this sets flags according to byte,
+				// or if it simply stores the byte into the flags.
+				// For now, assume it means store directly into flags.
+				// sz5h3pnFlags = sz53pn_addTable[inPort];
+				setFlags(inPort);
+				// TODO: what's the correct value for Q?
 				flagQ = true;
 				break;
 			}
-			case 0x71: {     /* OUT (C),0 */
+			case 0x71: {     /* OUT (C),F */
 				memptr = getRegBC();
-				computerImpl.outPort(memptr++, 0x00);
+				computerImpl.outPort(memptr++, getFlags());
 				ticks += 4;
 				break;
 			}
