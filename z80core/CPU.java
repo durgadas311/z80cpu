@@ -14,6 +14,7 @@ public interface CPU {
 	int getRegDE();
 	int getRegHL();
 	int getRegPC();
+	void setRegPC(int pc);
 	int getRegSP();
 	// TODO: support these?
 	int getRegAFx();
