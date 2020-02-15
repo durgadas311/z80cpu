@@ -940,6 +940,9 @@ public class I8080 implements CPU {
 		Arrays.fill(breakpointAt, false);
 	}
 
+	// Only one type of special cycle in 8080
+	public String specialCycle() { return "INT"; }
+
 	public final int execute() {
 		ticks = 0;
 

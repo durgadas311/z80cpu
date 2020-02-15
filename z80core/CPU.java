@@ -39,7 +39,8 @@ public interface CPU {
 	boolean isINTLine();
 	void setINTLine(boolean intLine);
 	void triggerNMI();
-	int execute();	// num clock cycles, - for interrupt
+	int execute();	// num clock cycles, - for interrupt, etc
+	String specialCycle(); // for tracing, if execute() < 0
 	void resetBreakpoints();
 	String dumpDebug();
 }

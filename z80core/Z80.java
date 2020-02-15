@@ -230,6 +230,7 @@ public class Z80 implements CPU {
 	private boolean pendingEI = false;
 	// Estado de la línea NMI
 	private boolean activeNMI = false;
+	private String spcl = "";
 	// Si está activa la línea INT
 	// En el 48 y los +2a/+3 la línea INT se activa durante 32 ciclos de reloj
 	// En el 128 y +2, se activa 36 ciclos de reloj
@@ -1820,6 +1821,8 @@ public class Z80 implements CPU {
 		Arrays.fill(breakpointAt, false);
 	}
 
+	public String specialCycle() { return spcl; }
+
 	public final int execute() {
 		ticks = 0;
 		// Primero se comprueba NMI
@@ -1827,6 +1830,7 @@ public class Z80 implements CPU {
 			activeNMI = false;
 			lastFlagQ = false;
 			nmi();
+			spcl = "NMI";
 			return -ticks;
 		}
 
@@ -1837,6 +1841,7 @@ public class Z80 implements CPU {
 				lastFlagQ = false;
 				interruption();
 				if (!intrFetch) {
+					spcl = "INT";
 					return -ticks;
 				}
 			}
@@ -1864,6 +1869,7 @@ public class Z80 implements CPU {
 			computerImpl.execDone();
 		}
 		if (intrFetch) {
+			spcl = "INT";
 			ticks = -ticks;
 		}
 		intrFetch = false;

@@ -86,6 +86,7 @@ public class Z180 implements CPU {
 	private boolean activeNMI = false;
 	private boolean activeTRAP = false;
 	private boolean activeDMA = false;
+	private String spcl = "";
 	// Si está activa la línea INT
 	// En el 48 y los +2a/+3 la línea INT se activa durante 32 ciclos de reloj
 	// En el 128 y +2, se activa 36 ciclos de reloj
@@ -1868,6 +1869,8 @@ public class Z180 implements CPU {
 		Arrays.fill(breakpointAt, false);
 	}
 
+	public String specialCycle() { return spcl; }
+
 	public final int execute() {
 		ticks = 0;
 		// TODO: DMAC cycles...
@@ -1875,10 +1878,12 @@ public class Z180 implements CPU {
 			activeNMI = false;
 			lastFlagQ = false;
 			nmi();
-			return -ticks;	// need to differentiate
+			spcl = "NMI";
+			return -ticks;
 		}
 		if (dma()) {
-			return -ticks;	// need to differentiate
+			spcl = "DMA";
+			return -ticks;
 		}
 
 		if (activeINT) {
@@ -1886,7 +1891,8 @@ public class Z180 implements CPU {
 				lastFlagQ = false;
 				interruption();
 				if (!intrFetch) {
-					return -ticks;	// need to differentiate
+					spcl = "INT";
+					return -ticks;
 				}
 			}
 		}
@@ -1904,7 +1910,8 @@ public class Z180 implements CPU {
 		// may have thrown TRAP... PC pushed and reset to 0000...
 		if (activeTRAP) {
 			activeTRAP = false;
-			return -ticks;	// need to differentiate
+			spcl = "TRAP";
+			return -ticks;
 		}
 
 		lastFlagQ = flagQ;
@@ -1917,7 +1924,8 @@ public class Z180 implements CPU {
 			computerImpl.execDone();
 		}
 		if (intrFetch) {
-			ticks = -ticks;	// need to differentiate
+			spcl = "INT";
+			ticks = -ticks;
 		}
 		intrFetch = false;
 		return ticks;
