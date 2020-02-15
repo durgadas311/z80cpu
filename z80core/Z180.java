@@ -1,4 +1,4 @@
-// cOPYRIght 2020 Douglas Miller <durgadas311@gmail.com>
+// Copyright 2020 Douglas Miller <durgadas311@gmail.com>
 // Derived from:
 //-----------------------------------------------------------------------------
 //Title:        Emulador en Java de un Sinclair ZX Spectrum 48K
@@ -1705,10 +1705,10 @@ public class Z180 implements CPU {
 		}
 		// for cycle-stealing, need to alternate between CPU and DMA...
 		int ccr31 = ccr[0x31] & 0xff;
-		if ((ccr31 & 0b00000000) == 0b00000000 ||
-				(ccr31 & 0b00000000) == 0b00000000) {
+		if ((ccr31 & 0b00110000) == 0b00110000 ||
+				(ccr31 & 0b00001100) == 0b00001100) {
 			// I/O DMA not supported...
-			System.err.format("Z180 DMA: unsuppoerted mode\n");
+			System.err.format("Z180 DMA: unsupported mode\n");
 			activeDMA = false;
 			ccr[0x30] &= ~0b01000000; // DE0=0
 			return false;
