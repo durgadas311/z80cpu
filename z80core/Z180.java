@@ -85,6 +85,7 @@ public class Z180 implements CPU {
 	// Estado de la línea NMI
 	private boolean activeNMI = false;
 	private boolean activeTRAP = false;
+	private boolean activeDMA = false;
 	// Si está activa la línea INT
 	// En el 48 y los +2a/+3 la línea INT se activa durante 32 ciclos de reloj
 	// En el 128 y +2, se activa 36 ciclos de reloj
@@ -1578,6 +1579,7 @@ public class Z180 implements CPU {
 
 	// *ALL* OUTPUT goes through here...
 	private void outPort(int port, int val) {
+		int v;
 		// TODO: ? if ((port & 0xc0) != ioa) ?
 		if ((port & ~0x3f) != ioa) {
 			computerImpl.outPort(port, val);
@@ -1585,12 +1587,18 @@ public class Z180 implements CPU {
 		}
 		port &= 0x3f;	// unnesseccary?
 		// TODO: notify listeners...?
-		if (port == 0x34) {	// not all bits are writeable
-			// ITC
-			int v = (ccr[port] & 0b11111000) | (val & 0b00000111);
+		switch (port) {
+		case 0x34: // ITC
+			v = (ccr[port] & 0b11111000) | (val & 0b00000111);
 			if ((val & 0b10000000) == 0) {
 				v &= 0b01111111;
 			}
+			ccr[port] = (byte)v;
+			return;
+		case 0x30: // DSTAT (ch 0 only, for now)
+			if ((val & 0b00010000) != 0) return; // DWE0
+			v = (ccr[port] & 0b10110011) | (val & 0b01001100);
+			if ((v & 0b01000000) != 0) v |= 0b00000001; // DME=1
 			ccr[port] = (byte)v;
 			return;
 		}
@@ -1673,6 +1681,81 @@ public class Z180 implements CPU {
 		// Z80 is little-endian
 		poke8(address, value & 0xff);
 		poke8(address + 1, (value >> 8) & 0xff);
+	}
+
+	private int getDmaa(int reg) {
+		int a = ccr[reg] & 0xff;
+		a |= (ccr[reg + 1] & 0xff) << 8;
+		a |= (ccr[reg + 2] & 0x0f) << 16;
+		return a;
+	}
+
+	private void putDmaa(int reg, int pa) {
+		ccr[reg] = (byte)pa;
+		ccr[reg + 1] = (byte)(pa >> 8);
+		ccr[reg + 2] = (byte)(pa >> 16);
+	}
+
+	// Only memory-to-memory (ch 0) supported
+	// returns 'true' if DMA cycle was performed
+	private boolean dma() {
+		if ((ccr[0x30] & 0b01000001) != 0b01000001) { // not DE0=1 && DME=1
+			return false;
+		}
+		// for cycle-stealing, need to alternate between CPU and DMA...
+		int ccr31 = ccr[0x31] & 0xff;
+		if ((ccr31 & 0b00000000) == 0b00000000 ||
+				(ccr31 & 0b00000000) == 0b00000000) {
+			// I/O DMA not supported...
+			System.err.format("Z180 DMA: unsuppoerted mode\n");
+			activeDMA = false;
+			ccr[0x30] &= ~0b01000000; // DE0=0
+			return false;
+		}
+		boolean burst = ((ccr31 & 0b00000010) != 0);
+		if (!burst) {
+			activeDMA = !activeDMA;
+			if (!activeDMA) { // was true...
+				return false;
+			}
+		}
+		int sa = getDmaa(0x20);
+		int da = getDmaa(0x23);
+		int bc = ((ccr[0x27] & 0xff) << 8) | (ccr[0x26] & 0xff);
+		boolean ret = false;
+		if (bc != 0) {
+			int d = computerImpl.peek8(sa);
+			ticks += 3;
+			computerImpl.poke8(da, d);
+			ticks += 3;
+			if ((ccr31 & 0b00001000) == 0) { // SM1=0, +/-
+				if ((ccr31 & 0b00000100) == 0) { // SM0=0, +
+					++sa;
+				} else {
+					--sa;
+				}
+				putDmaa(0x20, sa);
+			}
+			if ((ccr31 & 0b00100000) == 0) { // DM1=0, +/-
+				if ((ccr31 & 0b00010000) == 0) { // DM0=0, +
+					++da;
+				} else {
+					--da;
+				}
+				putDmaa(0x23, da);
+			}
+			--bc;
+			ccr[0x27] = (byte)(bc >> 8);
+			ccr[0x26] = (byte)bc;
+			ret = true;
+		}
+		if (bc == 0) {
+			// terminate operation...
+			activeDMA = false;
+			// TODO: also DME=0?
+			ccr[0x30] &= ~0b01000000; // DE0=0
+		}
+		return ret;
 	}
 
 	private void trap(int nth, int op, int more) {
@@ -1762,6 +1845,7 @@ public class Z180 implements CPU {
 		//      1.- La lectura del opcode del M1 que se descarta
 		//      2.- Si estaba en un HALT esperando una INT, lo saca de la espera
 		// Need an M1 (opcode fetch) cycle, + 1, but no side-effects...
+		ccr[0x30] &= ~0b00000001; // DME=0
 		ticks += 5;
 		if (halted) {
 			halted = false;
@@ -1791,7 +1875,10 @@ public class Z180 implements CPU {
 			activeNMI = false;
 			lastFlagQ = false;
 			nmi();
-			return -ticks;
+			return -ticks;	// need to differentiate
+		}
+		if (dma()) {
+			return -ticks;	// need to differentiate
 		}
 
 		if (activeINT) {
@@ -1799,7 +1886,7 @@ public class Z180 implements CPU {
 				lastFlagQ = false;
 				interruption();
 				if (!intrFetch) {
-					return -ticks;
+					return -ticks;	// need to differentiate
 				}
 			}
 		}
@@ -1817,7 +1904,7 @@ public class Z180 implements CPU {
 		// may have thrown TRAP... PC pushed and reset to 0000...
 		if (activeTRAP) {
 			activeTRAP = false;
-			return -ticks;
+			return -ticks;	// need to differentiate
 		}
 
 		lastFlagQ = flagQ;
@@ -1830,7 +1917,7 @@ public class Z180 implements CPU {
 			computerImpl.execDone();
 		}
 		if (intrFetch) {
-			ticks = -ticks;
+			ticks = -ticks;	// need to differentiate
 		}
 		intrFetch = false;
 		return ticks;
@@ -5446,7 +5533,7 @@ public class Z180 implements CPU {
 	}
 
 	public String dumpDebug() {
-		String s = new String();
+		String s = "--- Z180 ---\n";
 		s += String.format("INT=%s NMI=%s mode=%s IFF1=%s IFF2=%s\n",
 				isINTLine(), isNMI(), getIM().name(), isIFF1(), isIFF2());
 		s += String.format("PC=%04x SP=%04x R=%02x I=%02x\n",
@@ -5474,6 +5561,16 @@ public class Z180 implements CPU {
 			(regFx & ADDSUB_MASK) == 0 ? "n" : "N",
 			(regFx & CARRY_MASK) == 0 ? "c" : "C"
 			);
+		s += String.format("ITC=%02x\n",
+			ccr[0x34] & 0xff);
+		s += String.format("DMA0: %02x:%02x:%02x %02x:%02x:%02x %02x:%02x\n",
+			ccr[0x22] & 0xff, ccr[0x21] & 0xff, ccr[0x20] & 0xff,
+			ccr[0x25] & 0xff, ccr[0x24] & 0xff, ccr[0x23] & 0xff,
+			ccr[0x27] & 0xff, ccr[0x26] & 0xff);
+		s += String.format("DSTAT=%02x DMODE=%02x\n",
+			ccr[0x30] & 0xff, ccr[0x31] & 0xff);
+		s += String.format("MMU: CBR=%02x BBR=%02x CBAR=%02x\n",
+			ccr[0x38] & 0xff, ccr[0x39] & 0xff, ccr[0x3a] & 0xff);
 		return s;
 	}
 }
