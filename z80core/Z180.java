@@ -92,7 +92,7 @@ public class Z180 implements CPU {
 	// En el 128 y +2, se activa 36 ciclos de reloj
 	private boolean activeINT = false;
 	private int intLines = 0;
-	private int prePRT = 0;
+	private int preFRC = 0;
 	// Modo de interrupción
 	private IntMode modeINT = IntMode.IM0;
 	private boolean intrFetch = false;
@@ -845,7 +845,7 @@ public class Z180 implements CPU {
 		activeNMI = false;
 		activeINT = false;
 		intLines = 0;
-		prePRT = 0;
+		preFRC = 0;
 		halted = false;
 		setIM(IntMode.IM0);
 		intrFetch = false;
@@ -1992,17 +1992,17 @@ public class Z180 implements CPU {
 
 	public final int execute() {
 		int t = execOne();
-		if ((ccr[0x10] & 0b00000011) != 0) {
-			// TODO: stay in sync when disabled?
+		if (t < 0) {
+			preFRC += -t;
+		} else {
+			preFRC += t;
+		}
+		while (preFRC >= 10) {
+			--ccr[0x18];
+			preFRC -= 10;
 			// TODO: try to implement as real-time?
-			if (t < 0) {
-				prePRT += -t;
-			} else {
-				prePRT += t;
-			}
-			while (prePRT >= 20) {
+			if ((ccr[0x10] & 0b00000011) != 0 && (ccr[0x18] & 1) != 0) {
 				doPRT();
-				prePRT -= 20;
 			}
 		}
 		return t;
