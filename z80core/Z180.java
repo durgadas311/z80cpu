@@ -92,6 +92,7 @@ public class Z180 implements CPU {
 	// En el 128 y +2, se activa 36 ciclos de reloj
 	private boolean activeINT = false;
 	private int intLines = 0;
+	private int prePRT = 0;
 	// Modo de interrupción
 	private IntMode modeINT = IntMode.IM0;
 	private boolean intrFetch = false;
@@ -844,15 +845,31 @@ public class Z180 implements CPU {
 		activeNMI = false;
 		activeINT = false;
 		intLines = 0;
+		prePRT = 0;
 		halted = false;
 		setIM(IntMode.IM0);
 		intrFetch = false;
 		lastFlagQ = false;
 		Arrays.fill(ccr, (byte)0);
-		ccr[0x34] = 0b00000001;
+		ccr[0x30] = (byte)0b00110010;
+		ccr[0x31] = (byte)0b11000001;
+		ccr[0x32] = (byte)0b11110000;
+		ccr[0x34] = (byte)0b00111001;
+		ccr[0x36] = (byte)0b11111100;
+		ccr[0x3e] = (byte)0b11111111;
+		ccr[0x3f] = (byte)0b00011111;
+		ccr[0x0c] = ccr[0x0d] = (byte)0xff;
+		ccr[0x0e] = ccr[0x0f] = (byte)0xff;
+		ccr[0x14] = ccr[0x15] = (byte)0xff;
+		ccr[0x16] = ccr[0x17] = (byte)0xff;
+		ccr[0x18] = (byte)0xff;	// FRC
 		ioa = 0;
 		cbr = bbr = 0;
-		com1 = bnk1 = 0xf000;
+		// TODO: what is the right value? docs differ
+		// some say 0b11110000, others 0b11111111 or 0b00000000
+		ccr[0x3a] = (byte)0b11111111;	// CBAR
+		com1 = (ccr[0x3a] & 0xf0) << 8;
+		bnk1 = (ccr[0x3a] & 0x0f) << 12;
 	}
 
 	// Rota a la izquierda el valor del argumento
@@ -1611,11 +1628,31 @@ public class Z180 implements CPU {
 			}
 			ccr[port] = (byte)v;
 			return;
-		case 0x30: // DSTAT (ch 0 only, for now)
+		case 0x30: // DSTAT
 			if ((val & 0b00010000) != 0) return; // DWE0
-			v = (ccr[port] & 0b10110011) | (val & 0b01001100);
-			if ((v & 0b01000000) != 0) v |= 0b00000001; // DME=1
+			v = (ccr[port] & 0b11000001) | (val & 0b00001100);
+			if ((val & 0b00010000) == 0) { // DWE0
+				v &= 0b10111111;
+				v |= (val & 0b01000000);
+				if ((v & 0b01000000) != 0) v |= 0b00000001; // DME=1
+			}
+			if ((val & 0b00100000) == 0) { // DWE1
+				v &= 0b01111111;
+				v |= (val & 0b10000000);
+				if ((v & 0b10000000) != 0) v |= 0b00000001; // DME=1
+			}
 			ccr[port] = (byte)v;
+			// TODO: only if changed?
+			if ((v & 0b01000100) == 0b00000100) {
+				raiseIntnlIntr(4);
+			} else {
+				lowerIntnlIntr(4);
+			}
+			if ((v & 0b10001000) == 0b00001000) {
+				raiseIntnlIntr(5);
+			} else {
+				lowerIntnlIntr(5);
+			}
 			return;
 		}
 		ccr[port] = (byte)val;
@@ -1642,8 +1679,18 @@ public class Z180 implements CPU {
 		if ((port & ~0x3f) != ioa) {
 			return computerImpl.inPort(port);
 		}
+		port &= 0x3f;	// unnesseccary?
+		int val = ccr[port] & 0xff;
 		// TODO: notify listeners...?
-		return ccr[port & 0x3f] & 0xff;
+		switch (port) {
+		case 0x10:	// TCR
+			ccr[port] &= 0b00111111;
+			lowerIntnlIntr(2);
+			lowerIntnlIntr(3);
+			break;
+		// TODO: special handling for PRT counters...
+		}
+		return val;
 	}
 
 	// *ALL* memory reads come through here...
@@ -1726,6 +1773,9 @@ public class Z180 implements CPU {
 			System.err.format("Z180 DMA: unsupported mode\n");
 			activeDMA = false;
 			ccr[0x30] &= ~0b01000000; // DE0=0
+			if ((ccr[0x30] & 0b00000100) != 0) { // DIE0?
+				raiseIntnlIntr(4);
+			}
 			return false;
 		}
 		boolean burst = ((ccr31 & 0b00000010) != 0);
@@ -1770,6 +1820,9 @@ public class Z180 implements CPU {
 			activeDMA = false;
 			// TODO: also DME=0?
 			ccr[0x30] &= ~0b01000000; // DE0=0
+			if ((ccr[0x30] & 0b00000100) != 0) { // DIE0?
+				raiseIntnlIntr(4);
+			}
 		}
 		return ret;
 	}
@@ -1899,7 +1952,63 @@ public class Z180 implements CPU {
 
 	public String specialCycle() { return spcl; }
 
+	// already know we're enabled...
+	private boolean dcrPRT(int reg) {
+		boolean ret = false;
+		if (ccr[reg] == 0 && ccr[reg + 1] == 0) {
+			ccr[reg] = ccr[reg + 2];
+			ccr[reg + 1] = ccr[reg + 3];
+			return ret;
+		}
+		--ccr[reg];
+		if (ccr[reg] == 0 && ccr[reg + 1] == 0) {
+			ret = true;
+			int tif = 0b01000000;	// TIF0
+			int tie = 0b00010000;	// TIE0
+			int irq = 2;
+			if (reg > 0x10) {
+				tif <<= 1;	// TIF1
+				tie <<= 1;	// TIE1
+				++irq;
+			}
+			ccr[0x10] |= tif;
+			if ((ccr[0x10] & tie) != 0) {
+				raiseIntnlIntr(irq);
+			}
+		} else if (ccr[reg] == -1) {
+			--ccr[reg + 1];
+		}
+		return ret;
+	}
+
+	private void doPRT() {
+		if ((ccr[0x10] & 0b00000001) != 0) { // PRT0
+			dcrPRT(0x0c);
+		}
+		if ((ccr[0x10] & 0b00000010) != 0) { // PRT1
+			dcrPRT(0x14);
+		}
+	}
+
 	public final int execute() {
+		int t = execOne();
+		if ((ccr[0x10] & 0b00000011) != 0) {
+			// TODO: stay in sync when disabled?
+			// TODO: try to implement as real-time?
+			if (t < 0) {
+				prePRT += -t;
+			} else {
+				prePRT += t;
+			}
+			while (prePRT >= 20) {
+				doPRT();
+				prePRT -= 20;
+			}
+		}
+		return t;
+	}
+
+	private int execOne() {
 		ticks = 0;
 		// TODO: DMAC cycles...
 		if (activeNMI) {
