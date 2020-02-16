@@ -38,7 +38,15 @@ public interface CPU {
 	boolean isIE();
 	boolean isINTLine();
 	void setINTLine(boolean intLine);
+	boolean hasNMI();	// not for 8080/8085
+	boolean isNMI();
 	void triggerNMI();
+	boolean hasINT1();	// Z180
+	boolean isINT1Line();
+	void setINT1Line(boolean intLine);
+	boolean hasINT2();	// Z180
+	boolean isINT2Line();
+	void setINT2Line(boolean intLine);
 	int execute();	// num clock cycles, - for interrupt, etc
 	String specialCycle(); // for tracing, if execute() < 0
 	void resetBreakpoints();

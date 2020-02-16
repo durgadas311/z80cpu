@@ -91,6 +91,7 @@ public class Z180 implements CPU {
 	// En el 48 y los +2a/+3 la línea INT se activa durante 32 ciclos de reloj
 	// En el 128 y +2, se activa 36 ciclos de reloj
 	private boolean activeINT = false;
+	private int intLines = 0;
 	// Modo de interrupción
 	private IntMode modeINT = IntMode.IM0;
 	private boolean intrFetch = false;
@@ -663,26 +664,39 @@ public class Z180 implements CPU {
 		ffIFF2 = state;
 	}
 
-	public final boolean isNMI() {
-		return activeNMI;
-	}
-
-	public final void setNMI(boolean nmi) {
-		activeNMI = nmi;
-	}
-
+	public final boolean hasNMI() { return true; }
+	public final boolean isNMI() { return activeNMI; }
+	public final void setNMI(boolean nmi) { activeNMI = nmi; }
 	// La línea de NMI se activa por impulso, no por nivel
-	public final void triggerNMI() {
-		activeNMI = true;
-	}
+	public final void triggerNMI() { activeNMI = true; }
 
 	// La línea INT se activa por nivel
-	public final boolean isINTLine() {
-		return activeINT;
+	public final boolean isINTLine() { return activeINT; }
+	public final void setINTLine(boolean intLine) { activeINT = intLine; }
+
+	public final boolean hasINT1() { return true; }
+	public final boolean isINT1Line() { return ((intLines & 0b0001) != 0); }
+	public final void setINT1Line(boolean intLine) {
+		if (intLine) raiseIntnlIntr(0);
+		else lowerIntnlIntr(0);
 	}
 
-	public final void setINTLine(boolean intLine) {
-		activeINT = intLine;
+	public final boolean hasINT2() { return true; }
+	public final boolean isINT2Line() { return ((intLines & 0b0010) != 0); }
+	public final void setINT2Line(boolean intLine) {
+		if (intLine) raiseIntnlIntr(1);
+		else lowerIntnlIntr(1);
+	}
+
+	// Includes INT1/INT2.
+	// 16 sources allowed, but Z180 has only 9.
+	private void raiseIntnlIntr(int src) {
+		src &= 0x0f;
+		intLines |= (1 << src);
+	}
+	private void lowerIntnlIntr(int src) {
+		src &= 0x0f;
+		intLines &= ~(1 << src);
 	}
 
 	//Acceso al modo de interrupción
@@ -829,6 +843,7 @@ public class Z180 implements CPU {
 		pendingEI = false;
 		activeNMI = false;
 		activeINT = false;
+		intLines = 0;
 		halted = false;
 		setIM(IntMode.IM0);
 		intrFetch = false;
@@ -1834,6 +1849,19 @@ public class Z180 implements CPU {
 		memptr = regPC;
 		//System.out.println(String.format("Coste INT: %d", tEstados-tmp));
 	}
+	// Always IM2, uses IL register
+	private void internalIntr(int v) {
+		if (halted) {
+			halted = false;
+			regPC = (regPC + 1) & 0xffff;
+		}
+		ffIFF1 = ffIFF2 = false;
+		push(regPC);
+		int vec = (regI << 8) | (ccr[0x33] & 0b11100000) | (v << 1);
+		regPC = peek16(vec);
+		// TODO: additional cycles?
+		memptr = regPC;
+	}
 
 	//Interrupción NMI, no utilizado por ahora
 	/* Desglose de ciclos de máquina y T-Estados
@@ -1885,15 +1913,25 @@ public class Z180 implements CPU {
 			spcl = "DMA";
 			return -ticks;
 		}
-
-		if (activeINT) {
-			if ((ccr[0x34] & 0b00000001) != 0 && ffIFF1 && !pendingEI) {
+		// TODO: where do internal interrups land?
+		int ccr34 = ccr[0x34] & 0xff;
+		int iim = (ccr34 >> 1) | 0b1111111111111100;
+		if (activeINT && (ccr34 & 0b00000001) != 0 && ffIFF1 && !pendingEI) {
+			lastFlagQ = false;
+			interruption();
+			spcl = "INT0";
+			if (!intrFetch) {
+				return -ticks;
+			}
+		} else if ((intLines & iim) != 0 && ffIFF1 && !pendingEI) {
+			// TODO: possible race here with lowerIntnlIntr()?
+			int irq = Integer.numberOfTrailingZeros(intLines & iim);
+			// irq<0 not possible...?
+			if (irq >= 0) {
 				lastFlagQ = false;
-				interruption();
-				if (!intrFetch) {
-					spcl = "INT";
-					return -ticks;
-				}
+				internalIntr(irq);
+				spcl = "INT" + Integer.toString(irq + 1);
+				return -ticks;
 			}
 		}
 
@@ -1924,7 +1962,6 @@ public class Z180 implements CPU {
 			computerImpl.execDone();
 		}
 		if (intrFetch) {
-			spcl = "INT";
 			ticks = -ticks;
 		}
 		intrFetch = false;

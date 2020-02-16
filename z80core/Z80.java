@@ -799,6 +799,7 @@ public class Z80 implements CPU {
 		ffIFF2 = state;
 	}
 
+	public final boolean hasNMI() { return true; }
 	public final boolean isNMI() {
 		return activeNMI;
 	}
@@ -820,6 +821,13 @@ public class Z80 implements CPU {
 	public final void setINTLine(boolean intLine) {
 		activeINT = intLine;
 	}
+
+	public final boolean hasINT1() { return false; }
+	public final boolean isINT1Line() { return false; }
+	public final void setINT1Line(boolean intLine) { }
+	public final boolean hasINT2() { return false; }
+	public final boolean isINT2Line() { return false; }
+	public final void setINT2Line(boolean intLine) { }
 
 	//Acceso al modo de interrupción
 	public final IntMode getIM() {

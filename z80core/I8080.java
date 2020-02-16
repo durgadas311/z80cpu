@@ -461,7 +461,15 @@ public class I8080 implements CPU {
 
 	public boolean isIE() { return ffIE; }
 
+	public final boolean hasNMI() { return false; }
+	public final boolean isNMI() { return false; }
 	public final void triggerNMI() { }
+	public final boolean hasINT1() { return false; }
+	public final boolean isINT1Line() { return false; }
+	public final void setINT1Line(boolean intLine) { }
+	public final boolean hasINT2() { return false; }
+	public final boolean isINT2Line() { return false; }
+	public final void setINT2Line(boolean intLine) { }
 
 	public final boolean isINTLine() {
 		return activeINT;
