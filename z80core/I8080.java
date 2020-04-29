@@ -15,9 +15,8 @@ public class I8080 implements CPU {
 	private int opCode;
 	private final boolean execDone;
 	private static final int CARRY_MASK = 0x01;
-	private static final int ADDSUB_MASK = 0x02;
+	private static final int BIT1_MASK = 0x02;
 	private static final int PARITY_MASK = 0x04;
-	private static final int OVERFLOW_MASK = 0x04; // alias de PARITY_MASK
 	private static final int BIT3_MASK = 0x08;
 	private static final int HALFCARRY_MASK = 0x10;
 	private static final int BIT5_MASK = 0x20;
@@ -25,13 +24,11 @@ public class I8080 implements CPU {
 	private static final int SIGN_MASK = 0x80;
 	private static final int FLAG_53_MASK = BIT5_MASK | BIT3_MASK;
 	private static final int FLAG_SZ_MASK = SIGN_MASK | ZERO_MASK;
-	private static final int FLAG_SZHN_MASK = FLAG_SZ_MASK | HALFCARRY_MASK | ADDSUB_MASK;
 	private static final int FLAG_SZP_MASK = FLAG_SZ_MASK | PARITY_MASK;
 	private static final int FLAG_SZHP_MASK = FLAG_SZP_MASK | HALFCARRY_MASK;
 	private int regA, regB, regC, regD, regE, regH, regL;
 	private int sz5h3pnFlags;
 	private boolean carryFlag;
-	private boolean flagQ, lastFlagQ;
 	private int regPC;
 	private int regSP;
 	private boolean ffIE = false;
@@ -41,17 +38,15 @@ public class I8080 implements CPU {
 	private boolean halted = false;
 	private boolean pinReset = false;
 	private int memptr;
-	private static final int sz53n_addTable[] = new int[256];
 	private static final int sz53pn_addTable[] = new int[256];
-	private static final int sz53n_subTable[] = new int[256];
-	private static final int sz53pn_subTable[] = new int[256];
 
 	static {
 		boolean evenBits;
 
 		for (int idx = 0; idx < 256; idx++) {
+			sz53pn_addTable[idx] = BIT1_MASK;
 			if (idx > 0x7f) {
-				sz53n_addTable[idx] |= SIGN_MASK;
+				sz53pn_addTable[idx] |= SIGN_MASK;
 			}
 
 			evenBits = true;
@@ -61,22 +56,12 @@ public class I8080 implements CPU {
 				}
 			}
 
-			sz53n_addTable[idx] |= (idx & FLAG_53_MASK);
-			sz53n_subTable[idx] = sz53n_addTable[idx] | ADDSUB_MASK;
-
 			if (evenBits) {
-				sz53pn_addTable[idx] = sz53n_addTable[idx] | PARITY_MASK;
-				sz53pn_subTable[idx] = sz53n_subTable[idx] | PARITY_MASK;
-			} else {
-				sz53pn_addTable[idx] = sz53n_addTable[idx];
-				sz53pn_subTable[idx] = sz53n_subTable[idx];
+				sz53pn_addTable[idx] |= PARITY_MASK;
 			}
 		}
 
-		sz53n_addTable[0] |= ZERO_MASK;
 		sz53pn_addTable[0] |= ZERO_MASK;
-		sz53n_subTable[0] |= ZERO_MASK;
-		sz53pn_subTable[0] |= ZERO_MASK;
 	}
 
 	private final boolean breakpointAt[] = new boolean[65536];
@@ -183,7 +168,7 @@ public class I8080 implements CPU {
 	public final void setRegAF(int word) {
 		regA = (word >>> 8) & 0xff;
 
-		sz5h3pnFlags = word & 0xfe;
+		sz5h3pnFlags = (word & 0b11010110) | BIT1_MASK;
 		carryFlag = (word & CARRY_MASK) != 0;
 	}
 
@@ -365,15 +350,10 @@ public class I8080 implements CPU {
 	}
 
 	public final boolean isAddSubFlag() {
-		return (sz5h3pnFlags & ADDSUB_MASK) != 0;
+		return (sz5h3pnFlags & BIT1_MASK) != 0;
 	}
 
 	public final void setAddSubFlag(boolean state) {
-		if (state) {
-			sz5h3pnFlags |= ADDSUB_MASK;
-		} else {
-			sz5h3pnFlags &= ~ADDSUB_MASK;
-		}
 	}
 
 	public final boolean isParOverFlag() {
@@ -454,8 +434,7 @@ public class I8080 implements CPU {
 	}
 
 	public final void setFlags(int regF) {
-		sz5h3pnFlags = regF & 0xfe;
-
+		sz5h3pnFlags = (regF & 0b11010110) | BIT1_MASK;
 		carryFlag = (regF & CARRY_MASK) != 0;
 	}
 
@@ -500,23 +479,22 @@ public class I8080 implements CPU {
 	}
 
 	// Reset
-	// TODO: only PC should be cleared, and ffIE set.
 	public final void reset() {
 		if (pinReset) {
 			pinReset = false;
 		} else {
-			regA = 0xff;
-			setFlags(0xff);
-			regB = 0xff;
-			regC = 0xff;
-			regD = 0xff;
-			regE = 0xff;
-			regH = 0xff;
-			regL = 0xff;
+			regA = 0;
+			setFlags(0);
+			regB = 0;
+			regC = 0;
+			regD = 0;
+			regE = 0;
+			regH = 0;
+			regL = 0;
 
-			regSP = 0xffff;
+			regSP = 0;
 
-			memptr = 0xffff;
+			memptr = 0;
 		}
 
 		regPC = 0;
@@ -525,7 +503,6 @@ public class I8080 implements CPU {
 		activeINT = false;
 		halted = false;
 		intrFetch = false;
-		lastFlagQ = false;
 	}
 
 	/*
@@ -552,17 +529,12 @@ public class I8080 implements CPU {
 	private int inc8(int oper8) {
 		oper8 = (oper8 + 1) & 0xff;
 
-		sz5h3pnFlags = sz53n_addTable[oper8];
+		sz5h3pnFlags = sz53pn_addTable[oper8];
 
 		if ((oper8 & 0x0f) == 0) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
-		if (oper8 == 0x80) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-
-		flagQ = true;
 		return oper8;
 	}
 
@@ -570,17 +542,12 @@ public class I8080 implements CPU {
 	private int dec8(int oper8) {
 		oper8 = (oper8 - 1) & 0xff;
 
-		sz5h3pnFlags = sz53n_subTable[oper8];
+		sz5h3pnFlags = sz53pn_addTable[oper8];
 
 		if ((oper8 & 0x0f) == 0x0f) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
-		if (oper8 == 0x7f) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-
-		flagQ = true;
 		return oper8;
 	}
 
@@ -590,7 +557,7 @@ public class I8080 implements CPU {
 
 		carryFlag = res > 0xff;
 		res &= 0xff;
-		sz5h3pnFlags = sz53n_addTable[res];
+		sz5h3pnFlags = sz53pn_addTable[res];
 
 		/* El módulo 16 del resultado será menor que el módulo 16 del registro A
 		 * si ha habido HalfCarry. Sucede lo mismo para todos los métodos suma
@@ -599,12 +566,7 @@ public class I8080 implements CPU {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
-		if (((regA ^ ~oper8) & (regA ^ res)) > 0x7f) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-
 		regA = res;
-		flagQ = true;
 	}
 
 	// Suma con acarreo de 8 bits
@@ -617,18 +579,13 @@ public class I8080 implements CPU {
 
 		carryFlag = res > 0xff;
 		res &= 0xff;
-		sz5h3pnFlags = sz53n_addTable[res];
+		sz5h3pnFlags = sz53pn_addTable[res];
 
 		if (((regA ^ oper8 ^ res) & 0x10) != 0) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
-		if (((regA ^ ~oper8) & (regA ^ res)) > 0x7f) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-
 		regA = res;
-		flagQ = true;
 	}
 
 	// Suma dos operandos de 16 bits sin carry afectando a los flags
@@ -636,46 +593,15 @@ public class I8080 implements CPU {
 		oper16 += reg16;
 
 		carryFlag = oper16 > 0xffff;
-		sz5h3pnFlags = (sz5h3pnFlags & FLAG_SZP_MASK) | ((oper16 >>> 8) & FLAG_53_MASK);
 		oper16 &= 0xffff;
 
+		sz5h3pnFlags &= ~HALFCARRY_MASK;
 		if ((oper16 & 0x0fff) < (reg16 & 0x0fff)) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
 		memptr = reg16 + 1;
-		flagQ = true;
 		return oper16;
-	}
-
-	// Suma con acarreo de 16 bits
-	private void adc16(int reg16) {
-		int regHL = getRegHL();
-		memptr = regHL + 1;
-
-		int res = regHL + reg16;
-		if (carryFlag) {
-			res++;
-		}
-
-		carryFlag = res > 0xffff;
-		res &= 0xffff;
-		setRegHL(res);
-
-		sz5h3pnFlags = sz53n_addTable[regH];
-		if (res != 0) {
-			sz5h3pnFlags &= ~ZERO_MASK;
-		}
-
-		if (((res ^ regHL ^ reg16) & 0x1000) != 0) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
-		}
-
-		if (((regHL ^ ~reg16) & (regHL ^ res)) > 0x7fff) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-
-		flagQ = true;
 	}
 
 	// Resta de 8 bits
@@ -684,7 +610,7 @@ public class I8080 implements CPU {
 
 		carryFlag = res < 0;
 		res &= 0xff;
-		sz5h3pnFlags = sz53n_subTable[res];
+		sz5h3pnFlags = sz53pn_addTable[res];
 
 		/* El módulo 16 del resultado será mayor que el módulo 16 del registro A
 		 * si ha habido HalfCarry. Sucede lo mismo para todos los métodos resta
@@ -693,12 +619,7 @@ public class I8080 implements CPU {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
-		if (((regA ^ oper8) & (regA ^ res)) > 0x7f) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-
 		regA = res;
-		flagQ = true;
 	}
 
 	// Resta con acarreo de 8 bits
@@ -711,55 +632,22 @@ public class I8080 implements CPU {
 
 		carryFlag = res < 0;
 		res &= 0xff;
-		sz5h3pnFlags = sz53n_subTable[res];
+		sz5h3pnFlags = sz53pn_addTable[res];
 
 		if (((regA ^ oper8 ^ res) & 0x10) != 0) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
-		if (((regA ^ oper8) & (regA ^ res)) > 0x7f) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-
 		regA = res;
-		flagQ = true;
-	}
-
-	// Resta con acarreo de 16 bits
-	private void sbc16(int reg16) {
-		int regHL = getRegHL();
-		memptr = regHL + 1;
-
-		int res = regHL - reg16;
-		if (carryFlag) {
-			res--;
-		}
-
-		carryFlag = res < 0;
-		res &= 0xffff;
-		setRegHL(res);
-
-		sz5h3pnFlags = sz53n_subTable[regH];
-		if (res != 0) {
-			sz5h3pnFlags &= ~ZERO_MASK;
-		}
-
-		if (((res ^ regHL ^ reg16) & 0x1000) != 0) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
-		}
-
-		if (((regHL ^ reg16) & (regHL ^ res)) > 0x7fff) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-		flagQ = true;
 	}
 
 	// Operación AND lógica
 	private void and(int oper8) {
+		boolean hc = (((regA | oper8) & 0x08) != 0);
 		regA &= oper8;
 		carryFlag = false;
-		sz5h3pnFlags = sz53pn_addTable[regA] | HALFCARRY_MASK;
-		flagQ = true;
+		sz5h3pnFlags = sz53pn_addTable[regA];
+		if (hc) sz5h3pnFlags |= HALFCARRY_MASK;
 	}
 
 	// Operación XOR lógica
@@ -767,7 +655,6 @@ public class I8080 implements CPU {
 		regA = (regA ^ oper8) & 0xff;
 		carryFlag = false;
 		sz5h3pnFlags = sz53pn_addTable[regA];
-		flagQ = true;
 	}
 
 	// Operación OR lógica
@@ -775,7 +662,6 @@ public class I8080 implements CPU {
 		regA = (regA | oper8) & 0xff;
 		carryFlag = false;
 		sz5h3pnFlags = sz53pn_addTable[regA];
-		flagQ = true;
 	}
 
 	// Operación de comparación con el registro A
@@ -788,19 +674,12 @@ public class I8080 implements CPU {
 		carryFlag = res < 0;
 		res &= 0xff;
 
-		sz5h3pnFlags = (sz53n_addTable[oper8] & FLAG_53_MASK)
-			| // No necesito preservar H, pero está a 0 en la tabla de todas formas
-			(sz53n_subTable[res] & FLAG_SZHN_MASK);
+		sz5h3pnFlags = sz53pn_addTable[res];
 
 		if ((res & 0x0f) > (regA & 0x0f)) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
-		if (((regA ^ oper8) & (regA ^ res)) > 0x7f) {
-			sz5h3pnFlags |= OVERFLOW_MASK;
-		}
-
-		flagQ = true;
 	}
 
 	// DAA
@@ -820,17 +699,8 @@ public class I8080 implements CPU {
 			carry = true;
 		}
 
-		if ((sz5h3pnFlags & ADDSUB_MASK) != 0) {
-			sub(suma);
-			sz5h3pnFlags = (sz5h3pnFlags & HALFCARRY_MASK) | sz53pn_subTable[regA];
-		} else {
-			add(suma);
-			sz5h3pnFlags = (sz5h3pnFlags & HALFCARRY_MASK) | sz53pn_addTable[regA];
-		}
-
+		add(suma);
 		carryFlag = carry;
-		// Los add/sub ya ponen el resto de los flags
-		flagQ = true;
 	}
 
 	// POP
@@ -958,7 +828,6 @@ public class I8080 implements CPU {
 		// encontró una interrupción enmascarable y, de ser así, se procesa.
 		if (activeINT) {
 			if (ffIE && !pendingEI) {
-				lastFlagQ = false;
 				interruption();
 				// intrFetch is always true
 			}
@@ -970,11 +839,7 @@ public class I8080 implements CPU {
 
 		opCode = fetchOpcode();	// this may be fetching interrupt instruction
 
-		flagQ = false;
-
 		decodeOpcode(opCode);
-
-		lastFlagQ = flagQ;
 
 		// Si está pendiente la activación de la interrupciones y el
 		// código que se acaba de ejecutar no es el propio EI
@@ -1029,8 +894,6 @@ public class I8080 implements CPU {
 				if (carryFlag) {
 					regA |= CARRY_MASK;
 				}
-				sz5h3pnFlags = (sz5h3pnFlags & FLAG_SZP_MASK) | (regA & FLAG_53_MASK);
-				flagQ = true;
 				break;
 			}
 			case 0x09: {     /* ADD HL,BC */
@@ -1066,8 +929,6 @@ public class I8080 implements CPU {
 				if (carryFlag) {
 					regA |= SIGN_MASK;
 				}
-				sz5h3pnFlags = (sz5h3pnFlags & FLAG_SZP_MASK) | (regA & FLAG_53_MASK);
-				flagQ = true;
 				break;
 			}
 			case 0x11: {     /* LD DE,nn */
@@ -1103,8 +964,6 @@ public class I8080 implements CPU {
 				if (oldCarry) {
 					regA |= CARRY_MASK;
 				}
-				sz5h3pnFlags = (sz5h3pnFlags & FLAG_SZP_MASK) | (regA & FLAG_53_MASK);
-				flagQ = true;
 				break;
 			}
 			case 0x19: {     /* ADD HL,DE */
@@ -1141,8 +1000,6 @@ public class I8080 implements CPU {
 				if (oldCarry) {
 					regA |= SIGN_MASK;
 				}
-				sz5h3pnFlags = (sz5h3pnFlags & FLAG_SZP_MASK) | (regA & FLAG_53_MASK);
-				flagQ = true;
 				break;
 			}
 			case 0x21: {     /* LD HL,nn */
@@ -1205,9 +1062,6 @@ public class I8080 implements CPU {
 			}
 			case 0x2F: {     /* CPL */
 				regA ^= 0xff;
-				sz5h3pnFlags = (sz5h3pnFlags & FLAG_SZP_MASK) | HALFCARRY_MASK
-					| (regA & FLAG_53_MASK) | ADDSUB_MASK;
-				flagQ = true;
 				break;
 			}
 			case 0x31: {     /* LD SP,nn */
@@ -1244,10 +1098,7 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x37: {     /* SCF */
-				int regQ = lastFlagQ ? sz5h3pnFlags : 0;
 				carryFlag = true;
-				sz5h3pnFlags = (sz5h3pnFlags & FLAG_SZP_MASK) | (((regQ ^ sz5h3pnFlags) | regA) & FLAG_53_MASK);
-				flagQ = true;
 				break;
 			}
 			case 0x39: {     /* ADD HL,SP */
@@ -1278,13 +1129,7 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x3F: {     /* CCF */
-				int regQ = lastFlagQ ? sz5h3pnFlags : 0;
-				sz5h3pnFlags = (sz5h3pnFlags & FLAG_SZP_MASK) | (((regQ ^ sz5h3pnFlags) | regA) & FLAG_53_MASK);
-				if (carryFlag) {
-					sz5h3pnFlags |= HALFCARRY_MASK;
-				}
 				carryFlag = !carryFlag;
-				flagQ = true;
 				break;
 			}
 //			case 0x40: {     /* LD B,B */
@@ -1812,6 +1657,7 @@ public class I8080 implements CPU {
 				}
 				break;
 			}
+			case 0xCB:	/* undocumented illegal */
 			case 0xC3: {     /* JP nn */
 				memptr = regPC = fetch16();
 				break;
@@ -1848,6 +1694,7 @@ public class I8080 implements CPU {
 				}
 				break;
 			}
+			case 0xD9:	/* undocumented illegal */
 			case 0xC9: {     /* RET */
 				regPC = memptr = pop();
 				break;
@@ -1870,6 +1717,9 @@ public class I8080 implements CPU {
 				}
 				break;
 			}
+			case 0xFD:	/* undocumented illegal */
+			case 0xED:	/* undocumented illegal */
+			case 0xDD:	/* undocumented illegal */
 			case 0xCD: {     /* CALL nn */
 				memptr = fetch16();
 				++ticks;
@@ -2164,11 +2014,11 @@ public class I8080 implements CPU {
 		s += String.format("A=%02x F=%s%s%s%s%s%s%s%s\n", regA,
 			(sz5h3pnFlags & SIGN_MASK) == 0 ? "s" : "S",
 			(sz5h3pnFlags & ZERO_MASK) == 0 ? "z" : "Z",
-			(sz5h3pnFlags & BIT5_MASK) == 0 ? "." : "5",
+			".",
 			(sz5h3pnFlags & HALFCARRY_MASK) == 0 ? "h" : "H",
-			(sz5h3pnFlags & BIT3_MASK) == 0 ? "." : "3",
+			".",
 			(sz5h3pnFlags & PARITY_MASK) == 0 ? "p" : "P",
-			(sz5h3pnFlags & ADDSUB_MASK) == 0 ? "n" : "N",
+			"1",
 			carryFlag ? "c" : "C"
 			);
 		return s;
