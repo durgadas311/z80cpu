@@ -544,7 +544,7 @@ public class I8080 implements CPU {
 
 		sz5h3pnFlags = sz53pn_addTable[oper8];
 
-		if ((oper8 & 0x0f) == 0x0f) {
+		if ((oper8 & 0x0f) != 0x0f) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
@@ -559,9 +559,6 @@ public class I8080 implements CPU {
 		res &= 0xff;
 		sz5h3pnFlags = sz53pn_addTable[res];
 
-		/* El módulo 16 del resultado será menor que el módulo 16 del registro A
-		 * si ha habido HalfCarry. Sucede lo mismo para todos los métodos suma
-		 * SIN carry */
 		if ((res & 0x0f) < (regA & 0x0f)) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
@@ -595,11 +592,6 @@ public class I8080 implements CPU {
 		carryFlag = oper16 > 0xffff;
 		oper16 &= 0xffff;
 
-		sz5h3pnFlags &= ~HALFCARRY_MASK;
-		if ((oper16 & 0x0fff) < (reg16 & 0x0fff)) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
-		}
-
 		memptr = reg16 + 1;
 		return oper16;
 	}
@@ -612,10 +604,7 @@ public class I8080 implements CPU {
 		res &= 0xff;
 		sz5h3pnFlags = sz53pn_addTable[res];
 
-		/* El módulo 16 del resultado será mayor que el módulo 16 del registro A
-		 * si ha habido HalfCarry. Sucede lo mismo para todos los métodos resta
-		 * SIN carry, incluido cp */
-		if ((res & 0x0f) > (regA & 0x0f)) {
+		if (((regA ^ oper8 ^ res) & 0x10) == 0) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
@@ -634,7 +623,7 @@ public class I8080 implements CPU {
 		res &= 0xff;
 		sz5h3pnFlags = sz53pn_addTable[res];
 
-		if (((regA ^ oper8 ^ res) & 0x10) != 0) {
+		if (((regA ^ oper8 ^ res) & 0x10) == 0) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
@@ -676,7 +665,7 @@ public class I8080 implements CPU {
 
 		sz5h3pnFlags = sz53pn_addTable[res];
 
-		if ((res & 0x0f) > (regA & 0x0f)) {
+		if (((regA ^ oper8 ^ res) & 0x10) == 0) {
 			sz5h3pnFlags |= HALFCARRY_MASK;
 		}
 
