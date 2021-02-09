@@ -1,7 +1,7 @@
 all: z80core.jar
 
 z80core.jar: z80core/*.java
-	javac -source 1.7 -target 1.7 z80core/*.java
+	javac z80core/*.java
 	jar -cf z80core.jar z80core/*.class
 
 clean:

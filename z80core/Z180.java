@@ -18,6 +18,7 @@ import z80core.Z80State.IntMode;
 public class Z180 implements CPU {
 
 	private final Computer computerImpl;
+	private ComputerIO asci = null;
 	private int ticks;
 	// Código de instrucción a ejecutar
 	private int opCode;
@@ -185,6 +186,15 @@ public class Z180 implements CPU {
 	// Constructor de la clase
 	public Z180(Computer impl) {
 		computerImpl = impl;
+		execDone = false;
+		ccr = new byte[64];
+		Arrays.fill(breakpointAt, false);
+		reset();
+	}
+
+	public Z180(Computer impl, ComputerIO asci) {
+		computerImpl = impl;
+		this.asci = asci;
 		execDone = false;
 		ccr = new byte[64];
 		Arrays.fill(breakpointAt, false);
@@ -1619,6 +1629,10 @@ public class Z180 implements CPU {
 			return;
 		}
 		port &= 0x3f;	// unnesseccary?
+		if (asci != null && port < 0x0a || (port & 0x3e) == 0x12) {
+			asci.outPort(port, val);
+			return; // TODO: don't update ccr[]?
+		}
 		// TODO: notify listeners...?
 		switch (port) {
 		case 0x34: // ITC
@@ -1680,6 +1694,10 @@ public class Z180 implements CPU {
 			return computerImpl.inPort(port);
 		}
 		port &= 0x3f;	// unnesseccary?
+		if (asci != null && port < 0x0a || (port & 0x3e) == 0x12) {
+			// TODO: don't update ccr[]?
+			return asci.inPort(port);
+		}
 		int val = ccr[port] & 0xff;
 		// TODO: notify listeners...?
 		switch (port) {
