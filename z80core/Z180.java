@@ -129,6 +129,11 @@ public class Z180 implements CPU {
 	private int bnk1;
 	private int cbr;
 	private int com1;
+	private int mw;	// number of added MREQ WAIT cycles
+	private int iw;	// number of added IORQ WAIT cycles
+	private int rw;	// number of REF cycles total (w/WAIT)
+	private int rc; // REF interval, cycles
+	private int rcc;	// REF interval counter
 
 	/* Algunos flags se precalculan para un tratamiento más rápido
 	 * Concretamente, SIGN, ZERO, los bits 3, 5, PARITY y ADDSUB:
@@ -864,8 +869,13 @@ public class Z180 implements CPU {
 		ccr[0x30] = (byte)0b00110010;
 		ccr[0x31] = (byte)0b11000001;
 		ccr[0x32] = (byte)0b11110000;
+		mw = 3;
+		iw = 3;
 		ccr[0x34] = (byte)0b00111001;
 		ccr[0x36] = (byte)0b11111100;
+		rw = 2;
+		rc = 10;
+		rcc = 0;
 		ccr[0x3e] = (byte)0b11111111;
 		ccr[0x3f] = (byte)0b00011111;
 		ccr[0x0c] = ccr[0x0d] = (byte)0xff;
@@ -1625,6 +1635,7 @@ public class Z180 implements CPU {
 		int v;
 		// TODO: ? if ((port & 0xc0) != ioa) ?
 		if ((port & ~0x3f) != ioa) {
+			ticks += iw;	// assume only for external I/O
 			computerImpl.outPort(port, val);
 			return;
 		}
@@ -1671,6 +1682,18 @@ public class Z180 implements CPU {
 		}
 		ccr[port] = (byte)val;
 		switch (port) {
+		case 0x32:	// DCNTL (wait states)
+			mw = ((val & 0b11000000) >> 6);
+			iw = ((val & 0b00110000) >> 4);
+			break;
+		case 0x36:	// RCR
+			if ((val & 0b10000000) != 0) { // REFE
+				rw = ((val & 0b01000000) >> 6) + 1; // cycles per REF
+			} else {
+				rw = 0;
+			}
+			rc = (1 << (val & 0b00000011)) * 10; // cycles between REF
+			break;
 		case 0x38:	// CBR
 			cbr = val << 12;
 			break;
@@ -1691,6 +1714,7 @@ public class Z180 implements CPU {
 	private int inPort(int port) {
 		// TODO: ? if ((port & 0xc0) != ioa) ?
 		if ((port & ~0x3f) != ioa) {
+			ticks += iw;	// assume only for external I/O
 			return computerImpl.inPort(port);
 		}
 		port &= 0x3f;	// unnesseccary?
@@ -1715,7 +1739,7 @@ public class Z180 implements CPU {
 	private int peek8(int address) {
 		int paddr = phyAddr(address);
 		int val = computerImpl.peek8(paddr);
-		ticks += 3;
+		ticks += 3 + mw;
 		return val;
 	}
 
@@ -1755,7 +1779,7 @@ public class Z180 implements CPU {
 	private void poke8(int address, int value) {
 		int paddr = phyAddr(address);
 		computerImpl.poke8(paddr, value);
-		ticks += 3;
+		ticks += 3 + mw;
 	}
 
 	private void poke16(int address, int value) {
@@ -2027,7 +2051,12 @@ public class Z180 implements CPU {
 	}
 
 	private int execOne() {
+		rcc -= ticks;
 		ticks = 0;
+		if (rw > 0 && rcc <= 0) {
+			rcc = rc;
+			ticks += rw;	// do a REF cycle
+		}
 		// TODO: DMAC cycles...
 		if (activeNMI) {
 			activeNMI = false;
