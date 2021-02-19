@@ -18,7 +18,9 @@ import z80core.Z80State.IntMode;
 public class Z180 implements CPU {
 
 	private final Computer computerImpl;
-	private ComputerIO asci = null;
+	private ComputerIO[] addDevs;
+	private byte[] addPorts;
+	private int numDevs;
 	private int ticks;
 	// Código de instrucción a ejecutar
 	private int opCode;
@@ -192,18 +194,40 @@ public class Z180 implements CPU {
 	public Z180(Computer impl) {
 		computerImpl = impl;
 		execDone = false;
+		Z180init();
+	}
+
+	public Z180(Computer impl, ComputerIO asci) {
+		computerImpl = impl;
+		execDone = false;
+		Z180init();
+		addASCI(asci);
+	}
+
+	private void Z180init() {
+		addPorts = new byte[64];
+		addDevs = new ComputerIO[4];
+		numDevs = 0;
 		ccr = new byte[64];
 		Arrays.fill(breakpointAt, false);
 		reset();
 	}
 
-	public Z180(Computer impl, ComputerIO asci) {
-		computerImpl = impl;
-		this.asci = asci;
-		execDone = false;
-		ccr = new byte[64];
-		Arrays.fill(breakpointAt, false);
-		reset();
+	private void addASCI(ComputerIO asci) {
+		int x = numDevs++;
+		if (x >= addDevs.length) return;
+		addDevs[x] = asci;
+		x += 1;
+		for (int p = 0; p < 0x0a; ++p) {
+			addPorts[p] = (byte)x;
+		}
+		addPorts[0x12] = (byte)x;
+		addPorts[0x13] = (byte)x;
+		// TODO: only for Z80S180...
+		addPorts[0x1a] = (byte)x;
+		addPorts[0x1b] = (byte)x;
+		addPorts[0x1c] = (byte)x;
+		addPorts[0x1d] = (byte)x;
 	}
 
 	// Acceso a registros de 8 bits
@@ -1640,8 +1664,9 @@ public class Z180 implements CPU {
 			return;
 		}
 		port &= 0x3f;	// unnesseccary?
-		if (asci != null && port < 0x0a || (port & 0x3e) == 0x12) {
-			asci.outPort(port, val);
+		if (addPorts[port] != 0) {
+			v = (addPorts[port] & 0xff) - 1;
+			addDevs[v].outPort(port, val);
 			return; // TODO: don't update ccr[]?
 		}
 		// TODO: notify listeners...?
@@ -1718,9 +1743,10 @@ public class Z180 implements CPU {
 			return computerImpl.inPort(port);
 		}
 		port &= 0x3f;	// unnesseccary?
-		if (asci != null && port < 0x0a || (port & 0x3e) == 0x12) {
+		if (addPorts[port] != 0) {
 			// TODO: don't update ccr[]?
-			return asci.inPort(port);
+			int v = (addPorts[port] & 0xff) - 1;
+			return addDevs[v].inPort(port);
 		}
 		int val = ccr[port] & 0xff;
 		// TODO: notify listeners...?
