@@ -21,6 +21,7 @@ public class Z180 implements CPU {
 	private ComputerIO[] addDevs;
 	private byte[] addPorts;
 	private int numDevs;
+	private boolean z180s;
 	private int ticks;
 	// Código de instrucción a ejecutar
 	private int opCode;
@@ -194,14 +195,16 @@ public class Z180 implements CPU {
 	public Z180(Computer impl) {
 		computerImpl = impl;
 		execDone = false;
+		z180s = false;
 		Z180init();
 	}
 
-	public Z180(Computer impl, ComputerIO asci) {
+	public Z180(Computer impl, ComputerIO asci, boolean s) {
 		computerImpl = impl;
 		execDone = false;
+		z180s = s;
 		Z180init();
-		addASCI(asci);
+		if (asci != null) addASCI(asci);
 	}
 
 	private void Z180init() {
@@ -223,11 +226,12 @@ public class Z180 implements CPU {
 		}
 		addPorts[0x12] = (byte)x;
 		addPorts[0x13] = (byte)x;
-		// TODO: only for Z80S180...
-		addPorts[0x1a] = (byte)x;
-		addPorts[0x1b] = (byte)x;
-		addPorts[0x1c] = (byte)x;
-		addPorts[0x1d] = (byte)x;
+		if (z180s) {
+			addPorts[0x1a] = (byte)x;
+			addPorts[0x1b] = (byte)x;
+			addPorts[0x1c] = (byte)x;
+			addPorts[0x1d] = (byte)x;
+		}
 	}
 
 	// Acceso a registros de 8 bits
@@ -914,6 +918,18 @@ public class Z180 implements CPU {
 		ccr[0x3a] = (byte)0b11111111;	// CBAR
 		com1 = (ccr[0x3a] & 0xf0) << 8;
 		bnk1 = (ccr[0x3a] & 0x0f) << 12;
+	}
+
+	private int getClkDiv() {
+		int d = 1;
+		if ((ccr[0x1e] & 0b10000000) == 0) d = 2;
+		return d;
+	}
+
+	private int getClkMult() {
+		int m = 1;
+		if ((ccr[0x1f] & 0b10000000) != 0) m = 2;
+		return m;
 	}
 
 	// Rota a la izquierda el valor del argumento
@@ -1707,6 +1723,11 @@ public class Z180 implements CPU {
 		}
 		ccr[port] = (byte)val;
 		switch (port) {
+		case 0x1e: // CMR
+		case 0x1f: // CCR
+			if (!z180s) break;
+			computerImpl.changeSpeed(getClkMult(), getClkDiv());
+			break;
 		case 0x32:	// DCNTL (wait states)
 			mw = ((val & 0b11000000) >> 6);
 			iw = ((val & 0b00110000) >> 4);

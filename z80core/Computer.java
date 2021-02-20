@@ -30,6 +30,7 @@ public interface Computer {
 	int inPort(int port);
 	void outPort(int port, int value);
 
+	void changeSpeed(int mlt, int div); // notification of CPU speed change
 	void contendedStates(int address, int tstates);
 	long getTStates();
 
