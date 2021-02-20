@@ -911,6 +911,7 @@ public class Z180 implements CPU {
 		ccr[0x14] = ccr[0x15] = (byte)0xff;
 		ccr[0x16] = ccr[0x17] = (byte)0xff;
 		ccr[0x18] = (byte)0xff;	// FRC
+		ccr[0x1e] = (byte)0x3f;	// CMR (Z80S180)
 		ioa = 0;
 		cbr = bbr = 0;
 		// TODO: what is the right value? docs differ
@@ -918,6 +919,9 @@ public class Z180 implements CPU {
 		ccr[0x3a] = (byte)0b11111111;	// CBAR
 		com1 = (ccr[0x3a] & 0xf0) << 8;
 		bnk1 = (ccr[0x3a] & 0x0f) << 12;
+		if (z180s) {
+			computerImpl.changeSpeed(getClkMult(), getClkDiv());
+		}
 	}
 
 	private int getClkDiv() {
