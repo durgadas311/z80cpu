@@ -2536,22 +2536,27 @@ public class Z180 implements CPU {
 //				break;
 //			}
 			case 0x41: {     /* LD B,C */
+				++ticks;
 				regB = regC;
 				break;
 			}
 			case 0x42: {     /* LD B,D */
+				++ticks;
 				regB = regD;
 				break;
 			}
 			case 0x43: {     /* LD B,E */
+				++ticks;
 				regB = regE;
 				break;
 			}
 			case 0x44: {     /* LD B,H */
+				++ticks;
 				regB = regH;
 				break;
 			}
 			case 0x45: {     /* LD B,L */
+				++ticks;
 				regB = regL;
 				break;
 			}
@@ -2560,10 +2565,12 @@ public class Z180 implements CPU {
 				break;
 			}
 			case 0x47: {     /* LD B,A */
+				++ticks;
 				regB = regA;
 				break;
 			}
 			case 0x48: {     /* LD C,B */
+				++ticks;
 				regC = regB;
 				break;
 			}
@@ -2571,18 +2578,22 @@ public class Z180 implements CPU {
 //				break;
 //			}
 			case 0x4A: {     /* LD C,D */
+				++ticks;
 				regC = regD;
 				break;
 			}
 			case 0x4B: {     /* LD C,E */
+				++ticks;
 				regC = regE;
 				break;
 			}
 			case 0x4C: {     /* LD C,H */
+				++ticks;
 				regC = regH;
 				break;
 			}
 			case 0x4D: {     /* LD C,L */
+				++ticks;
 				regC = regL;
 				break;
 			}
@@ -2591,14 +2602,17 @@ public class Z180 implements CPU {
 				break;
 			}
 			case 0x4F: {     /* LD C,A */
+				++ticks;
 				regC = regA;
 				break;
 			}
 			case 0x50: {     /* LD D,B */
+				++ticks;
 				regD = regB;
 				break;
 			}
 			case 0x51: {     /* LD D,C */
+				++ticks;
 				regD = regC;
 				break;
 			}
@@ -2606,14 +2620,17 @@ public class Z180 implements CPU {
 //				break;
 //			}
 			case 0x53: {     /* LD D,E */
+				++ticks;
 				regD = regE;
 				break;
 			}
 			case 0x54: {     /* LD D,H */
+				++ticks;
 				regD = regH;
 				break;
 			}
 			case 0x55: {     /* LD D,L */
+				++ticks;
 				regD = regL;
 				break;
 			}
@@ -2622,18 +2639,22 @@ public class Z180 implements CPU {
 				break;
 			}
 			case 0x57: {     /* LD D,A */
+				++ticks;
 				regD = regA;
 				break;
 			}
 			case 0x58: {     /* LD E,B */
+				++ticks;
 				regE = regB;
 				break;
 			}
 			case 0x59: {     /* LD E,C */
+				++ticks;
 				regE = regC;
 				break;
 			}
 			case 0x5A: {     /* LD E,D */
+				++ticks;
 				regE = regD;
 				break;
 			}
@@ -2641,10 +2662,12 @@ public class Z180 implements CPU {
 //				break;
 //			}
 			case 0x5C: {     /* LD E,H */
+				++ticks;
 				regE = regH;
 				break;
 			}
 			case 0x5D: {     /* LD E,L */
+				++ticks;
 				regE = regL;
 				break;
 			}
@@ -2653,22 +2676,27 @@ public class Z180 implements CPU {
 				break;
 			}
 			case 0x5F: {     /* LD E,A */
+				++ticks;
 				regE = regA;
 				break;
 			}
 			case 0x60: {     /* LD H,B */
+				++ticks;
 				regH = regB;
 				break;
 			}
 			case 0x61: {     /* LD H,C */
+				++ticks;
 				regH = regC;
 				break;
 			}
 			case 0x62: {     /* LD H,D */
+				++ticks;
 				regH = regD;
 				break;
 			}
 			case 0x63: {     /* LD H,E */
+				++ticks;
 				regH = regE;
 				break;
 			}
@@ -2676,6 +2704,7 @@ public class Z180 implements CPU {
 //				break;
 //			}
 			case 0x65: {     /* LD H,L */
+				++ticks;
 				regH = regL;
 				break;
 			}
@@ -2684,26 +2713,32 @@ public class Z180 implements CPU {
 				break;
 			}
 			case 0x67: {     /* LD H,A */
+				++ticks;
 				regH = regA;
 				break;
 			}
 			case 0x68: {     /* LD L,B */
+				++ticks;
 				regL = regB;
 				break;
 			}
 			case 0x69: {     /* LD L,C */
+				++ticks;
 				regL = regC;
 				break;
 			}
 			case 0x6A: {     /* LD L,D */
+				++ticks;
 				regL = regD;
 				break;
 			}
 			case 0x6B: {     /* LD L,E */
+				++ticks;
 				regL = regE;
 				break;
 			}
 			case 0x6C: {     /* LD L,H */
+				++ticks;
 				regL = regH;
 				break;
 			}
@@ -2715,6 +2750,7 @@ public class Z180 implements CPU {
 				break;
 			}
 			case 0x6F: {     /* LD L,A */
+				++ticks;
 				regL = regA;
 				break;
 			}
@@ -2752,26 +2788,32 @@ public class Z180 implements CPU {
 				break;
 			}
 			case 0x78: {     /* LD A,B */
+				++ticks;
 				regA = regB;
 				break;
 			}
 			case 0x79: {     /* LD A,C */
+				++ticks;
 				regA = regC;
 				break;
 			}
 			case 0x7A: {     /* LD A,D */
+				++ticks;
 				regA = regD;
 				break;
 			}
 			case 0x7B: {     /* LD A,E */
+				++ticks;
 				regA = regE;
 				break;
 			}
 			case 0x7C: {     /* LD A,H */
+				++ticks;
 				regA = regH;
 				break;
 			}
 			case 0x7D: {     /* LD A,L */
+				++ticks;
 				regA = regL;
 				break;
 			}
