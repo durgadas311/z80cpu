@@ -1674,6 +1674,16 @@ public class Z180 implements CPU {
 		return vaddr;
 	}
 
+	private void clrTIF(int tif) {
+		ccr[0x10] &= ~tif;	// redundant when called from outPort()
+		if ((tif & 0b10000000) != 0) {	// TIF1
+			lowerIntnlIntr(3);
+		}
+		if ((tif & 0b01000000) != 0) {	// TIF0
+			lowerIntnlIntr(2);
+		}
+	}
+
 	// *ALL* OUTPUT goes through here...
 	private void outPort(int port, int val) {
 		int v;
@@ -1691,6 +1701,19 @@ public class Z180 implements CPU {
 		}
 		// TODO: notify listeners...?
 		switch (port) {
+		case 0x10: // TCR
+			ccr[port] = (byte)((ccr[port] & 0b11000000) | (val & 0b00111111));
+			if ((val & 0b00100000) == 0) {	// TIE1
+				lowerIntnlIntr(3);
+			} else if ((val & 0b10000000) != 0) {	// TIF1
+				raiseIntnlIntr(3);
+			}
+			if ((val & 0b00010000) == 0) {	// TIE0
+				lowerIntnlIntr(2);
+			} else if ((val & 0b01000000) != 0) {	// TIF0
+				raiseIntnlIntr(2);
+			}
+			return;
 		case 0x34: // ITC
 			v = (ccr[port] & 0b11111000) | (val & 0b00000111);
 			if ((val & 0b10000000) == 0) {
@@ -1777,11 +1800,16 @@ public class Z180 implements CPU {
 		// TODO: notify listeners...?
 		switch (port) {
 		case 0x10:	// TCR
-			ccr[port] &= 0b00111111;
-			lowerIntnlIntr(2);
-			lowerIntnlIntr(3);
+			clrTIF(0b11000000);
 			break;
-		// TODO: special handling for PRT counters...
+		case 0x0c:	// TMDR0L
+		case 0x0d:	// TMDR0H
+			clrTIF(0b01000000);
+			break;
+		case 0x14:	// TMDR1L
+		case 0x15:	// TMDR1H
+			clrTIF(0b10000000);
+			break;
 		}
 		return val;
 	}
