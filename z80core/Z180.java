@@ -204,7 +204,9 @@ public class Z180 implements CPU {
 		execDone = false;
 		z180s = s;
 		Z180init();
-		if (asci != null) addASCI(asci);
+		if (asci != null) {
+			addASCI(asci);
+		}
 	}
 
 	private void Z180init() {
@@ -232,6 +234,7 @@ public class Z180 implements CPU {
 			addPorts[0x1c] = (byte)x;
 			addPorts[0x1d] = (byte)x;
 		}
+		asci.setCPU(this);
 	}
 
 	// Acceso a registros de 8 bits
@@ -734,11 +737,11 @@ public class Z180 implements CPU {
 
 	// Includes INT1/INT2.
 	// 16 sources allowed, but Z180 has only 9.
-	private void raiseIntnlIntr(int src) {
+	public synchronized void raiseIntnlIntr(int src) {
 		src &= 0x0f;
 		intLines |= (1 << src);
 	}
-	private void lowerIntnlIntr(int src) {
+	public synchronized void lowerIntnlIntr(int src) {
 		src &= 0x0f;
 		intLines &= ~(1 << src);
 	}
