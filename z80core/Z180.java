@@ -939,6 +939,9 @@ public class Z180 implements CPU {
 		return m;
 	}
 
+	// Really should be protected, and ASCI is friend class
+	public byte[] getCCR() { return ccr; }
+
 	// Rota a la izquierda el valor del argumento
 	// El bit 0 y el flag C toman el valor del bit 7 antes de la operación
 	private int rlc(int oper8) {
@@ -5855,6 +5858,20 @@ public class Z180 implements CPU {
 				break;
 			}
 		}
+	}
+
+	public String dumpDebugAux() {
+		String ret = String.format("Z180 Device Registers:\n");
+		for (int x = 0; x < 64; ++x) {
+			if ((x & 0x0f) == 0x00) {
+				ret += String.format("%02x:", ioa + x);
+			}
+			ret += String.format(" %02x", ccr[x] & 0xff);
+			if ((x & 0x0f) == 0x0f) {
+				ret += '\n';
+			}
+		}
+		return ret;
 	}
 
 	public String dumpDebug() {
