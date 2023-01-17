@@ -713,7 +713,7 @@ public class Z80 implements CPU {
 		return (sz5h3pnFlags & BIT3_MASK) != 0;
 	}
 
-	public final void setBit3Fag(boolean state) {
+	public final void setBit3Flag(boolean state) {
 		if (state) {
 			sz5h3pnFlags |= BIT3_MASK;
 		} else {

@@ -14,8 +14,20 @@ public interface CPU {
 	int getRegDE();
 	int getRegHL();
 	int getRegPC();
-	void setRegPC(int pc);
 	int getRegSP();
+	void setRegA(int a);
+	void setRegB(int b);
+	void setRegC(int c);
+	void setRegD(int d);
+	void setRegE(int e);
+	void setRegH(int h);
+	void setRegL(int l);
+	void setRegAF(int psw);
+	void setRegBC(int bc);
+	void setRegDE(int de);
+	void setRegHL(int hl);
+	void setRegPC(int pc);
+	void setRegSP(int sp);
 	// TODO: support these?
 	int getRegAFx();
 	int getRegBCx();
