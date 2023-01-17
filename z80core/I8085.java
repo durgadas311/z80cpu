@@ -1,6 +1,6 @@
-// Copyright (c) 2018 Douglas Miller <durgadas311@gmail.com>
+// Copyright (c) 2023 Douglas Miller <durgadas311@gmail.com>
 
-// Derived from Z80.java
+// Derived from I8080.java
 // Douglas Miller <durgadas311@gmail.com>
 //
 package z80core;
@@ -8,43 +8,56 @@ package z80core;
 import java.util.Arrays;
 import z80core.Z80State.IntMode;
 
-public class I8080 implements CPU {
+public class I8085 implements CPU {
 
 	private final Computer computerImpl;
 	private int ticks;
 	private int opCode;
 	private final boolean execDone;
+	// Interrupt Mask register bits.
+	private static final int M5_5_MASK = 0x01;
+	private static final int M6_5_MASK = 0x02;
+	private static final int M7_5_MASK = 0x04;
+	private static final int IE_MASK = 0x08; // see notes...
+	private static final int I5_5_MASK = 0x10;
+	private static final int I6_5_MASK = 0x20;
+	private static final int I7_5_MASK = 0x40;
+	private static final int SID_MASK = 0x80;
+	// Program Status Word bits.
 	private static final int CARRY_MASK = 0x01;
-	private static final int BIT1_MASK = 0x02;
+	private static final int V_MASK = 0x02;	// a.k.a. overflow
 	private static final int PARITY_MASK = 0x04;
-	private static final int BIT3_MASK = 0x08;
+	private static final int BIT3_MASK = 0x08;	// always 0
 	private static final int HALFCARRY_MASK = 0x10;
-	private static final int BIT5_MASK = 0x20;
+	private static final int K_MASK = 0x20;	// signed compares
 	private static final int ZERO_MASK = 0x40;
 	private static final int SIGN_MASK = 0x80;
-	private static final int FLAG_53_MASK = BIT5_MASK | BIT3_MASK;
 	private static final int FLAG_SZ_MASK = SIGN_MASK | ZERO_MASK;
 	private static final int FLAG_SZP_MASK = FLAG_SZ_MASK | PARITY_MASK;
 	private static final int FLAG_SZHP_MASK = FLAG_SZP_MASK | HALFCARRY_MASK;
 	private int regA, regB, regC, regD, regE, regH, regL;
-	private int sz5h3pnFlags;
+	private int regIM;
+	private int szkh0pv_Flags;
 	private boolean carryFlag;
 	private int regPC;
 	private int regSP;
 	private boolean ffIE = false;
 	private boolean pendingEI = false;
 	private boolean activeINT = false;
+	private boolean activeTRAP = false;
+	private boolean trapState = false;
 	private boolean intrFetch = false;
 	private boolean halted = false;
 	private boolean pinReset = false;
 	private int memptr;
 	private static final int sz53pn_addTable[] = new int[256];
+	private static final int sz53n_subTable[] = new int[256];
 
 	static {
 		boolean evenBits;
 
 		for (int idx = 0; idx < 256; idx++) {
-			sz53pn_addTable[idx] = BIT1_MASK;
+			// TODO: sz53pn_addTable[idx] = V_MASK;
 			if (idx > 0x7f) {
 				sz53pn_addTable[idx] |= SIGN_MASK;
 			}
@@ -62,11 +75,12 @@ public class I8080 implements CPU {
 		}
 
 		sz53pn_addTable[0] |= ZERO_MASK;
+		sz53n_subTable[0] |= ZERO_MASK;
 	}
 
 	private final boolean breakpointAt[] = new boolean[65536];
 
-	public I8080(Computer impl) {
+	public I8085(Computer impl) {
 		computerImpl = impl;
 		execDone = false;
 		Arrays.fill(breakpointAt, false);
@@ -162,13 +176,13 @@ public class I8080 implements CPU {
 	public final void setRegLx(int value) { }
 
 	public final int getRegAF() {
-		return (regA << 8) | (carryFlag ? sz5h3pnFlags | CARRY_MASK : sz5h3pnFlags);
+		return (regA << 8) | (carryFlag ? szkh0pv_Flags | CARRY_MASK : szkh0pv_Flags);
 	}
 
 	public final void setRegAF(int word) {
 		regA = (word >>> 8) & 0xff;
 
-		sz5h3pnFlags = (word & 0b11010110) | BIT1_MASK;
+		szkh0pv_Flags = (word & 0b11010110) | V_MASK;
 		carryFlag = (word & CARRY_MASK) != 0;
 	}
 
@@ -350,96 +364,97 @@ public class I8080 implements CPU {
 	}
 
 	public final boolean isAddSubFlag() {
-		return (sz5h3pnFlags & BIT1_MASK) != 0;
+		return (szkh0pv_Flags & V_MASK) != 0;
 	}
 
 	public final void setAddSubFlag(boolean state) {
 	}
 
 	public final boolean isParOverFlag() {
-		return (sz5h3pnFlags & PARITY_MASK) != 0;
+		return (szkh0pv_Flags & PARITY_MASK) != 0;
 	}
 
 	public final void setParOverFlag(boolean state) {
 		if (state) {
-			sz5h3pnFlags |= PARITY_MASK;
+			szkh0pv_Flags |= PARITY_MASK;
 		} else {
-			sz5h3pnFlags &= ~PARITY_MASK;
+			szkh0pv_Flags &= ~PARITY_MASK;
 		}
 	}
 
 	public final boolean isBit3Flag() {
-		return (sz5h3pnFlags & BIT3_MASK) != 0;
+		return (szkh0pv_Flags & BIT3_MASK) != 0;
 	}
 
 	public final void setBit3Fag(boolean state) {
 		if (state) {
-			sz5h3pnFlags |= BIT3_MASK;
+			szkh0pv_Flags |= BIT3_MASK;
 		} else {
-			sz5h3pnFlags &= ~BIT3_MASK;
+			szkh0pv_Flags &= ~BIT3_MASK;
 		}
 	}
 
 	public final boolean isHalfCarryFlag() {
-		return (sz5h3pnFlags & HALFCARRY_MASK) != 0;
+		return (szkh0pv_Flags & HALFCARRY_MASK) != 0;
 	}
 
 	public final void setHalfCarryFlag(boolean state) {
 		if (state) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
+			szkh0pv_Flags |= HALFCARRY_MASK;
 		} else {
-			sz5h3pnFlags &= ~HALFCARRY_MASK;
+			szkh0pv_Flags &= ~HALFCARRY_MASK;
 		}
 	}
 
-	public final boolean isBit5Flag() {
-		return (sz5h3pnFlags & BIT5_MASK) != 0;
+	public final boolean isKFlag() {
+		return (szkh0pv_Flags & K_MASK) != 0;
 	}
 
-	public final void setBit5Flag(boolean state) {
+	public final void setKFlag(boolean state) {
 		if (state) {
-			sz5h3pnFlags |= BIT5_MASK;
+			szkh0pv_Flags |= K_MASK;
 		} else {
-			sz5h3pnFlags &= ~BIT5_MASK;
+			szkh0pv_Flags &= ~K_MASK;
 		}
 	}
 
 	public final boolean isZeroFlag() {
-		return (sz5h3pnFlags & ZERO_MASK) != 0;
+		return (szkh0pv_Flags & ZERO_MASK) != 0;
 	}
 
 	public final void setZeroFlag(boolean state) {
 		if (state) {
-			sz5h3pnFlags |= ZERO_MASK;
+			szkh0pv_Flags |= ZERO_MASK;
 		} else {
-			sz5h3pnFlags &= ~ZERO_MASK;
+			szkh0pv_Flags &= ~ZERO_MASK;
 		}
 	}
 
 	public final boolean isSignFlag() {
-		return (sz5h3pnFlags & SIGN_MASK) != 0;
+		return (szkh0pv_Flags & SIGN_MASK) != 0;
 	}
 
 	public final void setSignFlag(boolean state) {
 		if (state) {
-			sz5h3pnFlags |= SIGN_MASK;
+			szkh0pv_Flags |= SIGN_MASK;
 		} else {
-			sz5h3pnFlags &= ~SIGN_MASK;
+			szkh0pv_Flags &= ~SIGN_MASK;
 		}
 	}
 
 	// Acceso a los flags F
 	public final int getFlags() {
-		return carryFlag ? sz5h3pnFlags | CARRY_MASK : sz5h3pnFlags;
+		return carryFlag ? szkh0pv_Flags | CARRY_MASK : szkh0pv_Flags;
 	}
 
 	public final void setFlags(int regF) {
-		sz5h3pnFlags = (regF & 0b11010110) | BIT1_MASK;
+		szkh0pv_Flags = (regF & 0b11010110) | V_MASK;
 		carryFlag = (regF & CARRY_MASK) != 0;
 	}
 
 	public boolean isIE() { return ffIE; }
 
+	// Z80/Z180 interfaces that don't apply
 	public final boolean hasNMI() { return false; }
 	public final boolean isNMI() { return false; }
 	public final void triggerNMI() { }
@@ -457,6 +472,74 @@ public class I8080 implements CPU {
 	public final void setINTLine(boolean intLine) {
 		activeINT = intLine;
 	}
+	// These are 8085-only
+	public final boolean isRST5_5Line() {
+		return (regIM & I5_5_MASK) != 0;
+	}
+	public final void setRST5_5Line(boolean intLine) {
+		// RST to 0x002c
+		if (intLine) {
+			regIM |= I5_5_MASK;
+		} else {
+			regIM &= ~I5_5_MASK;
+		}
+	}
+	public final boolean isRST6_5Line() {
+		return (regIM & I6_5_MASK) != 0;
+	}
+	public final void setRST6_5Line(boolean intLine) {
+		// RST to 0x0034
+		if (intLine) {
+			regIM |= I6_5_MASK;
+		} else {
+			regIM &= ~I6_5_MASK;
+		}
+	}
+	public final boolean isRST7_5Line() {
+		return (regIM & I7_5_MASK) != 0;
+	}
+	public final void setRST7_5Line(boolean intLine) {
+		// RST to 0x003c
+		// edge-triggered, rising edge.
+		boolean last = (regIM & I7_5_MASK) != 0;
+		if (!last && intLine) {
+			regIM |= I7_5_MASK;
+		} else if (last && !intLine) {
+			regIM &= ~I7_5_MASK;
+		}
+	}
+	public final void setTRAPLine(boolean intLine) {
+		// RST to 0x0024
+		// TODO: implement this
+		// Goes high and remains high until acknowledged,
+		// then must be cleared externally before it can
+		// be triggered again. So, the CPU ignores the
+		// level of TRAP once it has been acknowledged.
+		if (intLine) {
+			if (trapState) return; // must have edge
+			activeTRAP = true;
+			trapState = true;
+		} else {
+			trapState = false;
+		}
+	}
+	public final void setSIDLine(boolean intLine) {
+		// serial input, to A bit 7 for RIM
+		if (intLine) {
+			regIM |= SID_MASK;
+		} else {
+			regIM &= ~SID_MASK;
+		}
+	}
+	private void setEI(boolean ei) {
+		ffIE = ei;
+		if (ffIE) {
+			regIM |= IE_MASK;
+		} else {
+			regIM &= ~IE_MASK;
+		}
+	}
+	// TODO: SOD output for SIM... handled like Z180 CSIO/ASCI
 
 	public final boolean isHalted() {
 		return halted;
@@ -491,6 +574,8 @@ public class I8080 implements CPU {
 			regE = 0;
 			regH = 0;
 			regL = 0;
+			regIM = 0;
+			// SOD = 0?
 
 			regSP = 0;
 
@@ -501,6 +586,8 @@ public class I8080 implements CPU {
 		ffIE = false;
 		pendingEI = false;
 		activeINT = false;
+		activeTRAP = false;
+		trapState = false;
 		halted = false;
 		intrFetch = false;
 	}
@@ -529,10 +616,10 @@ public class I8080 implements CPU {
 	private int inc8(int oper8) {
 		oper8 = (oper8 + 1) & 0xff;
 
-		sz5h3pnFlags = sz53pn_addTable[oper8];
+		szkh0pv_Flags = sz53pn_addTable[oper8];
 
 		if ((oper8 & 0x0f) == 0) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
+			szkh0pv_Flags |= HALFCARRY_MASK;
 		}
 
 		return oper8;
@@ -542,10 +629,10 @@ public class I8080 implements CPU {
 	private int dec8(int oper8) {
 		oper8 = (oper8 - 1) & 0xff;
 
-		sz5h3pnFlags = sz53pn_addTable[oper8];
+		szkh0pv_Flags = sz53pn_addTable[oper8];
 
 		if ((oper8 & 0x0f) != 0x0f) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
+			szkh0pv_Flags |= HALFCARRY_MASK;
 		}
 
 		return oper8;
@@ -557,10 +644,16 @@ public class I8080 implements CPU {
 
 		carryFlag = res > 0xff;
 		res &= 0xff;
-		sz5h3pnFlags = sz53pn_addTable[res];
+		szkh0pv_Flags = sz53pn_addTable[res];
 
 		if ((res & 0x0f) < (regA & 0x0f)) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
+			szkh0pv_Flags |= HALFCARRY_MASK;
+		}
+		if (((regA ^ oper8) & (regA ^ res)) > 0x7f) {
+			szkh0pv_Flags |= V_MASK;
+		}
+		if (((regA & oper8) | (regA & res) | (oper8 & res)) > 0x7f) {
+			szkh0pv_Flags |= K_MASK;
 		}
 
 		regA = res;
@@ -576,10 +669,16 @@ public class I8080 implements CPU {
 
 		carryFlag = res > 0xff;
 		res &= 0xff;
-		sz5h3pnFlags = sz53pn_addTable[res];
+		szkh0pv_Flags = sz53pn_addTable[res];
 
 		if (((regA ^ oper8 ^ res) & 0x10) != 0) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
+			szkh0pv_Flags |= HALFCARRY_MASK;
+		}
+		if (((regA ^ oper8) & (regA ^ res)) > 0x7f) {
+			szkh0pv_Flags |= V_MASK;
+		}
+		if (((regA & oper8) | (regA & res) | (oper8 & res)) > 0x7f) {
+			szkh0pv_Flags |= K_MASK;
 		}
 
 		regA = res;
@@ -602,10 +701,16 @@ public class I8080 implements CPU {
 
 		carryFlag = res < 0;
 		res &= 0xff;
-		sz5h3pnFlags = sz53pn_addTable[res];
+		szkh0pv_Flags = sz53pn_addTable[res];
 
 		if (((regA ^ oper8 ^ res) & 0x10) == 0) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
+			szkh0pv_Flags |= HALFCARRY_MASK;
+		}
+		if (((regA ^ oper8) & (regA ^ res)) > 0x7f) {
+			szkh0pv_Flags |= V_MASK;
+		}
+		if (((regA & ~oper8) | (regA & res) | (~oper8 & res)) > 0x7f) {
+			szkh0pv_Flags |= K_MASK;
 		}
 
 		regA = res;
@@ -621,13 +726,47 @@ public class I8080 implements CPU {
 
 		carryFlag = res < 0;
 		res &= 0xff;
-		sz5h3pnFlags = sz53pn_addTable[res];
+		szkh0pv_Flags = sz53pn_addTable[res];
 
 		if (((regA ^ oper8 ^ res) & 0x10) == 0) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
+			szkh0pv_Flags |= HALFCARRY_MASK;
+		}
+		if (((regA ^ oper8) & (regA ^ res)) > 0x7f) {
+			szkh0pv_Flags |= V_MASK;
+		}
+		if (((regA & ~oper8) | (regA & res) | (~oper8 & res)) > 0x7f) {
+			szkh0pv_Flags |= K_MASK;
 		}
 
 		regA = res;
+	}
+
+	// add: K = o1 * o2 + o1 * r + o2 * r
+	// o1 = sign of first operand,
+	// o2 = sign of second operand,
+	// r = sign of result.
+	// for subtract, o2 => !o2
+	private int sbc16(int reg16, int oper16) {
+		int res = reg16 - oper16;
+		if (carryFlag) {
+			res--;
+		}
+		carryFlag = res < 0;
+		res &= 0xffff;
+		szkh0pv_Flags = sz53n_subTable[res >> 8];
+		if (res != 0) {
+			szkh0pv_Flags &= ~ZERO_MASK;
+		}
+		if (((res ^ reg16 ^ oper16) & 0x1000) != 0) {
+			szkh0pv_Flags |= HALFCARRY_MASK;
+		}
+		if (((reg16 ^ oper16) & (reg16 ^ res)) > 0x7fff) {
+			szkh0pv_Flags |= V_MASK;
+		}
+		if (((reg16 & ~oper16) | (reg16 & res) | (~oper16 & res)) > 0x7fff) {
+			szkh0pv_Flags |= K_MASK;
+		}
+		return res;
 	}
 
 	// Operación AND lógica
@@ -635,22 +774,22 @@ public class I8080 implements CPU {
 		boolean hc = (((regA | oper8) & 0x08) != 0);
 		regA &= oper8;
 		carryFlag = false;
-		sz5h3pnFlags = sz53pn_addTable[regA];
-		if (hc) sz5h3pnFlags |= HALFCARRY_MASK;
+		szkh0pv_Flags = sz53pn_addTable[regA];
+		if (hc) szkh0pv_Flags |= HALFCARRY_MASK;
 	}
 
 	// Operación XOR lógica
 	private void xor(int oper8) {
 		regA = (regA ^ oper8) & 0xff;
 		carryFlag = false;
-		sz5h3pnFlags = sz53pn_addTable[regA];
+		szkh0pv_Flags = sz53pn_addTable[regA];
 	}
 
 	// Operación OR lógica
 	private void or(int oper8) {
 		regA = (regA | oper8) & 0xff;
 		carryFlag = false;
-		sz5h3pnFlags = sz53pn_addTable[regA];
+		szkh0pv_Flags = sz53pn_addTable[regA];
 	}
 
 	// Operación de comparación con el registro A
@@ -663,10 +802,10 @@ public class I8080 implements CPU {
 		carryFlag = res < 0;
 		res &= 0xff;
 
-		sz5h3pnFlags = sz53pn_addTable[res];
+		szkh0pv_Flags = sz53pn_addTable[res];
 
 		if (((regA ^ oper8 ^ res) & 0x10) == 0) {
-			sz5h3pnFlags |= HALFCARRY_MASK;
+			szkh0pv_Flags |= HALFCARRY_MASK;
 		}
 
 	}
@@ -676,7 +815,7 @@ public class I8080 implements CPU {
 		int suma = 0;
 		boolean carry = carryFlag;
 
-		if ((sz5h3pnFlags & HALFCARRY_MASK) != 0 || (regA & 0x0f) > 0x09) {
+		if ((szkh0pv_Flags & HALFCARRY_MASK) != 0 || (regA & 0x0f) > 0x09) {
 			suma = 6;
 		}
 
@@ -728,7 +867,7 @@ public class I8080 implements CPU {
 
 	// fetch instruction byte for M1 cycle
 	private int fetchOpcode() {
-		++ticks;
+		ticks += 1;
 		return fetch8();
 	}
 
@@ -776,7 +915,6 @@ public class I8080 implements CPU {
 	 *      M5: 3 T-Estados -> leer byte alto y saltar a la rutina de INT
 	 */
 	private void interruption() {
-
 		//System.out.println(String.format("INT at %d T-States", tEstados));
 //		int tmp = tEstados; // peek8 modifica los tEstados
 		// Si estaba en un HALT esperando una INT, lo saca de la espera
@@ -785,7 +923,7 @@ public class I8080 implements CPU {
 			regPC = (regPC + 1) & 0xffff;
 		}
 
-		ffIE = false;
+		setEI(false);
 		// total: 2+N t-states
 		intrFetch = true;
 		// TODO: i8080 can only fetch a single byte,
@@ -793,6 +931,21 @@ public class I8080 implements CPU {
 		ticks += 2; // 2 WAIT states added by INTR ACK initial M1
 		memptr = regPC;
 		//System.out.println(String.format("Coste INT: %d", tEstados-tmp));
+	}
+
+	private void intr85(int adr) {
+		// TODO: ticks += ?;
+		if (adr == 0x0024) { // TRAP
+			ffIE = false;
+		} else {
+			setEI(false);
+		}
+		if (halted) {
+			halted = false;
+			regPC = (regPC + 1) & 0xffff;
+		}
+		push(regPC);
+		regPC = memptr = adr;
 	}
 
 	public final boolean isBreakpoint(int address) {
@@ -813,10 +966,18 @@ public class I8080 implements CPU {
 	public final int execute() {
 		ticks = 0;
 
-		// Ahora se comprueba si al final de la instrucción anterior se
-		// encontró una interrupción enmascarable y, de ser así, se procesa.
-		if (activeINT) {
-			if (ffIE && !pendingEI) {
+		if (activeTRAP) {
+			activeTRAP = false;
+			intr85(0x0024);
+		}
+		if (ffIE && !pendingEI) {
+			if ((regIM & I7_5_MASK) != 0) {
+				intr85(0x003c);
+			} else if ((regIM & I6_5_MASK) != 0) {
+				intr85(0x0034);
+			} else if ((regIM & I5_5_MASK) != 0) {
+				intr85(0x002c);
+			} else if (activeINT) {
 				interruption();
 				// intrFetch is always true
 			}
@@ -847,6 +1008,7 @@ public class I8080 implements CPU {
 	}
 
 	private void decodeOpcode(int opCode) {
+		int tmp;
 
 		switch (opCode) {
 //			case 0x00:       /* NOP */
@@ -861,17 +1023,15 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x03: {     /* INX B */
-				++ticks;
+				ticks += 2;
 				incRegBC();
 				break;
 			}
 			case 0x04: {     /* INR B */
-				++ticks;
 				regB = inc8(regB);
 				break;
 			}
 			case 0x05: {     /* DCR B */
-				++ticks;
 				regB = dec8(regB);
 				break;
 			}
@@ -887,6 +1047,11 @@ public class I8080 implements CPU {
 				}
 				break;
 			}
+			case 0x08: {     /* DSUB */
+				ticks += 6;
+				setRegHL(sbc16(getRegHL(), getRegBC()));
+				break;
+			}
 			case 0x09: {     /* DAD B */
 				ticks += 6;
 				setRegHL(add16(getRegHL(), getRegBC()));
@@ -898,17 +1063,15 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x0B: {     /* DCX B */
-				++ticks;
+				ticks += 2;
 				decRegBC();
 				break;
 			}
 			case 0x0C: {     /* INR C */
-				++ticks;
 				regC = inc8(regC);
 				break;
 			}
 			case 0x0D: {     /* DCR C */
-				++ticks;
 				regC = dec8(regC);
 				break;
 			}
@@ -924,6 +1087,13 @@ public class I8080 implements CPU {
 				}
 				break;
 			}
+			case 0x10: {     /* ARHL */
+				ticks += 3;
+				tmp = getRegHL();
+				setRegHL((tmp & 0x8000) | (tmp >> 1));
+				carryFlag = (tmp & 1) != 0;
+				break;
+			}
 			case 0x11: {     /* LXI D,nn */
 				setRegDE(fetch16());
 				break;
@@ -934,17 +1104,15 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x13: {     /* INX D */
-				++ticks;
+				ticks += 2;
 				incRegDE();
 				break;
 			}
 			case 0x14: {     /* INR D */
-				++ticks;
 				regD = inc8(regD);
 				break;
 			}
 			case 0x15: {     /* DCR D */
-				++ticks;
 				regD = dec8(regD);
 				break;
 			}
@@ -961,6 +1129,14 @@ public class I8080 implements CPU {
 				}
 				break;
 			}
+			case 0x18: {     /* RDEL */
+				ticks += 6;
+				tmp = getRegDE();
+				setRegDE((tmp << 1) | (carryFlag ? 1 : 0));
+				carryFlag = (tmp > 0x7fff);
+				// TODO: V_MASK also set
+				break;
+			}
 			case 0x19: {     /* DAD D */
 				ticks += 6;
 				setRegHL(add16(getRegHL(), getRegDE()));
@@ -972,17 +1148,15 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x1B: {     /* DCX D */
-				++ticks;
+				ticks += 2;
 				decRegDE();
 				break;
 			}
 			case 0x1C: {     /* INR E */
-				++ticks;
 				regE = inc8(regE);
 				break;
 			}
 			case 0x1D: {     /* DCR E */
-				++ticks;
 				regE = dec8(regE);
 				break;
 			}
@@ -999,6 +1173,10 @@ public class I8080 implements CPU {
 				}
 				break;
 			}
+			case 0x20: {	/* RIM */
+				regA = regIM;
+				break;
+			}
 			case 0x21: {     /* LXI H,nn */
 				setRegHL(fetch16());
 				break;
@@ -1009,17 +1187,15 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x23: {     /* INX H */
-				++ticks;
+				ticks += 2;
 				incRegHL();
 				break;
 			}
 			case 0x24: {     /* INR H */
-				++ticks;
 				regH = inc8(regH);
 				break;
 			}
 			case 0x25: {     /* DCR H */
-				++ticks;
 				regH = dec8(regH);
 				break;
 			}
@@ -1029,6 +1205,11 @@ public class I8080 implements CPU {
 			}
 			case 0x27: {     /* DAA */
 				daa();
+				break;
+			}
+			case 0x28: {     /* LDHI */
+				ticks += 3;
+				setRegDE(getRegHL() + fetch8());
 				break;
 			}
 			case 0x29: {     /* DAD H */
@@ -1043,17 +1224,15 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x2B: {     /* DCX H */
-				++ticks;
+				ticks += 2;
 				decRegHL();
 				break;
 			}
 			case 0x2C: {     /* INR L */
-				++ticks;
 				regL = inc8(regL);
 				break;
 			}
 			case 0x2D: {     /* DCR L */
-				++ticks;
 				regL = dec8(regL);
 				break;
 			}
@@ -1063,6 +1242,18 @@ public class I8080 implements CPU {
 			}
 			case 0x2F: {     /* CMA */
 				regA ^= 0xff;
+				break;
+			}
+			case 0x30: {	/* SIM */
+				if ((regA & 0x08) != 0) {
+					regIM = (regIM & ~7) | (regA & 7);
+				}
+				if ((regA & 0x10) != 0) {
+					// TODO: Reset RST7_5 latch
+				}
+				if ((regA & 0x40) != 0) {
+					// TODO: SOD = (regA & 0x80)
+				}
 				break;
 			}
 			case 0x31: {     /* LXI SP,nn */
@@ -1076,7 +1267,7 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x33: {     /* INX SP */
-				++ticks;
+				ticks += 2;
 				regSP = (regSP + 1) & 0xffff;
 				break;
 			}
@@ -1100,6 +1291,11 @@ public class I8080 implements CPU {
 				carryFlag = true;
 				break;
 			}
+			case 0x38: {     /* LDSI */
+				ticks += 3;
+				setRegDE(getRegSP() + fetch8());
+				break;
+			}
 			case 0x39: {     /* DAD SP */
 				ticks += 6;
 				setRegHL(add16(getRegHL(), regSP));
@@ -1111,17 +1307,15 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0x3B: {     /* DCX SP */
-				++ticks;
+				ticks += 2;
 				regSP = (regSP - 1) & 0xffff;
 				break;
 			}
 			case 0x3C: {     /* INR A */
-				++ticks;
 				regA = inc8(regA);
 				break;
 			}
 			case 0x3D: {     /* DCR A */
-				++ticks;
 				regA = dec8(regA);
 				break;
 			}
@@ -1133,320 +1327,256 @@ public class I8080 implements CPU {
 				carryFlag = !carryFlag;
 				break;
 			}
-			case 0x40: {     /* MOV B,B */
-				++ticks;
-				break;
-			}
+//			case 0x40: {     /* MOV B,B */
+//				break;
+//			}
 			case 0x41: {     /* MOV B,C */
-				++ticks;
 				regB = regC;
 				break;
 			}
 			case 0x42: {     /* MOV B,D */
-				++ticks;
 				regB = regD;
 				break;
 			}
 			case 0x43: {     /* MOV B,E */
-				++ticks;
 				regB = regE;
 				break;
 			}
 			case 0x44: {     /* MOV B,H */
-				++ticks;
 				regB = regH;
 				break;
 			}
 			case 0x45: {     /* MOV B,L */
-				++ticks;
 				regB = regL;
 				break;
 			}
 			case 0x46: {     /* MOV B,M */
-				++ticks;
 				regB = peek8(getRegHL());
 				break;
 			}
 			case 0x47: {     /* MOV B,A */
-				++ticks;
 				regB = regA;
 				break;
 			}
 			case 0x48: {     /* MOV C,B */
-				++ticks;
 				regC = regB;
 				break;
 			}
-			case 0x49: {     /* MOV C,C */
-				++ticks;
-				break;
-			}
+//			case 0x49: {     /* MOV C,C */
+//				break;
+//			}
 			case 0x4A: {     /* MOV C,D */
-				++ticks;
 				regC = regD;
 				break;
 			}
 			case 0x4B: {     /* MOV C,E */
-				++ticks;
 				regC = regE;
 				break;
 			}
 			case 0x4C: {     /* MOV C,H */
-				++ticks;
 				regC = regH;
 				break;
 			}
 			case 0x4D: {     /* MOV C,L */
-				++ticks;
 				regC = regL;
 				break;
 			}
 			case 0x4E: {     /* MOV C,M */
-				++ticks;
 				regC = peek8(getRegHL());
 				break;
 			}
 			case 0x4F: {     /* MOV C,A */
-				++ticks;
 				regC = regA;
 				break;
 			}
 			case 0x50: {     /* MOV D,B */
-				++ticks;
 				regD = regB;
 				break;
 			}
 			case 0x51: {     /* MOV D,C */
-				++ticks;
 				regD = regC;
 				break;
 			}
-			case 0x52: {     /* MOV D,D */
-				++ticks;
-				break;
-			}
+//			case 0x52: {     /* MOV D,D */
+//				break;
+//			}
 			case 0x53: {     /* MOV D,E */
-				++ticks;
 				regD = regE;
 				break;
 			}
 			case 0x54: {     /* MOV D,H */
-				++ticks;
 				regD = regH;
 				break;
 			}
 			case 0x55: {     /* MOV D,L */
-				++ticks;
 				regD = regL;
 				break;
 			}
 			case 0x56: {     /* MOV D,M */
-				++ticks;
 				regD = peek8(getRegHL());
 				break;
 			}
 			case 0x57: {     /* MOV D,A */
-				++ticks;
 				regD = regA;
 				break;
 			}
 			case 0x58: {     /* MOV E,B */
-				++ticks;
 				regE = regB;
 				break;
 			}
 			case 0x59: {     /* MOV E,C */
-				++ticks;
 				regE = regC;
 				break;
 			}
 			case 0x5A: {     /* MOV E,D */
-				++ticks;
 				regE = regD;
 				break;
 			}
-			case 0x5B: {     /* MOV E,E */
-				++ticks;
-				break;
-			}
+//			case 0x5B: {     /* MOV E,E */
+//				break;
+//			}
 			case 0x5C: {     /* MOV E,H */
-				++ticks;
 				regE = regH;
 				break;
 			}
 			case 0x5D: {     /* MOV E,L */
-				++ticks;
 				regE = regL;
 				break;
 			}
 			case 0x5E: {     /* MOV E,M */
-				++ticks;
 				regE = peek8(getRegHL());
 				break;
 			}
 			case 0x5F: {     /* MOV E,A */
-				++ticks;
 				regE = regA;
 				break;
 			}
 			case 0x60: {     /* MOV H,B */
-				++ticks;
 				regH = regB;
 				break;
 			}
 			case 0x61: {     /* MOV H,C */
-				++ticks;
 				regH = regC;
 				break;
 			}
 			case 0x62: {     /* MOV H,D */
-				++ticks;
 				regH = regD;
 				break;
 			}
 			case 0x63: {     /* MOV H,E */
-				++ticks;
 				regH = regE;
 				break;
 			}
-			case 0x64: {     /* MOV H,H */
-				++ticks;
-				break;
-			}
+//			case 0x64: {     /* MOV H,H */
+//				break;
+//			}
 			case 0x65: {     /* MOV H,L */
-				++ticks;
 				regH = regL;
 				break;
 			}
 			case 0x66: {     /* MOV H,M */
-				++ticks;
 				regH = peek8(getRegHL());
 				break;
 			}
 			case 0x67: {     /* MOV H,A */
-				++ticks;
 				regH = regA;
 				break;
 			}
 			case 0x68: {     /* MOV L,B */
-				++ticks;
 				regL = regB;
 				break;
 			}
 			case 0x69: {     /* MOV L,C */
-				++ticks;
 				regL = regC;
 				break;
 			}
 			case 0x6A: {     /* MOV L,D */
-				++ticks;
 				regL = regD;
 				break;
 			}
 			case 0x6B: {     /* MOV L,E */
-				++ticks;
 				regL = regE;
 				break;
 			}
 			case 0x6C: {     /* MOV L,H */
-				++ticks;
 				regL = regH;
 				break;
 			}
-			case 0x6D: {     /* MOV L,L */
-				++ticks;
-				break;
-			}
+//			case 0x6D: {     /* MOV L,L */
+//				break;
+//			}
 			case 0x6E: {     /* MOV L,M */
-				++ticks;
 				regL = peek8(getRegHL());
 				break;
 			}
 			case 0x6F: {     /* MOV L,A */
-				++ticks;
 				regL = regA;
 				break;
 			}
 			case 0x70: {     /* MOV M,B */
-				++ticks;
 				poke8(getRegHL(), regB);
 				break;
 			}
 			case 0x71: {     /* MOV M,C */
-				++ticks;
 				poke8(getRegHL(), regC);
 				break;
 			}
 			case 0x72: {     /* MOV M,D */
-				++ticks;
 				poke8(getRegHL(), regD);
 				break;
 			}
 			case 0x73: {     /* MOV M,E */
-				++ticks;
 				poke8(getRegHL(), regE);
 				break;
 			}
 			case 0x74: {     /* MOV M,H */
-				++ticks;
 				poke8(getRegHL(), regH);
 				break;
 			}
 			case 0x75: {     /* MOV M,L */
-				++ticks;
 				poke8(getRegHL(), regL);
 				break;
 			}
 			case 0x76: {     /* HLT */
-				ticks += 3;
 				regPC = (regPC - 1) & 0xffff;
 				halted = true;
 				break;
 			}
 			case 0x77: {     /* MOV M,A */
-				++ticks;
 				poke8(getRegHL(), regA);
 				break;
 			}
 			case 0x78: {     /* MOV A,B */
-				++ticks;
 				regA = regB;
 				break;
 			}
 			case 0x79: {     /* MOV A,C */
-				++ticks;
 				regA = regC;
 				break;
 			}
 			case 0x7A: {     /* MOV A,D */
-				++ticks;
 				regA = regD;
 				break;
 			}
 			case 0x7B: {     /* MOV A,E */
-				++ticks;
 				regA = regE;
 				break;
 			}
 			case 0x7C: {     /* MOV A,H */
-				++ticks;
 				regA = regH;
 				break;
 			}
 			case 0x7D: {     /* MOV A,L */
-				++ticks;
 				regA = regL;
 				break;
 			}
 			case 0x7E: {     /* MOV A,M */
-				++ticks;
 				regA = peek8(getRegHL());
 				break;
 			}
-			case 0x7F: {     /* MOV A,A */
-				++ticks;
-				break;
-			}
+//			case 0x7F: {     /* MOV A,A */
+//				break;
+//			}
 			case 0x80: {     /* ADD B */
 				add(regB);
 				break;
@@ -1704,8 +1834,8 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0xC0: {     /* RNZ */
-				++ticks;
-				if ((sz5h3pnFlags & ZERO_MASK) == 0) {
+				ticks += 2;
+				if ((szkh0pv_Flags & ZERO_MASK) == 0) {
 					regPC = memptr = pop();
 				}
 				break;
@@ -1716,25 +1846,26 @@ public class I8080 implements CPU {
 			}
 			case 0xC2: {     /* JNZ nn */
 				memptr = fetch16();
-				if ((sz5h3pnFlags & ZERO_MASK) == 0) {
+				if ((szkh0pv_Flags & ZERO_MASK) == 0) {
 					regPC = memptr;
 					break;
 				}
 				break;
 			}
-			case 0xCB:	/* undocumented illegal */
 			case 0xC3: {     /* JMP nn */
 				memptr = regPC = fetch16();
 				break;
 			}
 			case 0xC4: {     /* CNZ nn */
-				++ticks;
-				memptr = fetch16();
-				if ((sz5h3pnFlags & ZERO_MASK) == 0) {
+				ticks += 2;
+				if ((szkh0pv_Flags & ZERO_MASK) == 0) {
+					memptr = fetch16();
 					push(regPC);
 					regPC = memptr;
 					break;
 				}
+				regPC = (regPC + 2) & 0xffff;
+				ticks += 3;
 				break;
 			}
 			case 0xC5: {     /* PUSH B */
@@ -1753,41 +1884,48 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0xC8: {     /* RZ */
-				++ticks;
-				if ((sz5h3pnFlags & ZERO_MASK) != 0) {
+				ticks += 2;
+				if ((szkh0pv_Flags & ZERO_MASK) != 0) {
 					regPC = memptr = pop();
 				}
 				break;
 			}
-			case 0xD9:	/* undocumented illegal */
 			case 0xC9: {     /* RET */
 				regPC = memptr = pop();
 				break;
 			}
 			case 0xCA: {     /* JZ nn */
 				memptr = fetch16();
-				if ((sz5h3pnFlags & ZERO_MASK) != 0) {
+				if ((szkh0pv_Flags & ZERO_MASK) != 0) {
 					regPC = memptr;
 					break;
+				}
+				break;
+			}
+			case 0xCB: {     /* RSTV */
+				ticks += 2;
+				if ((szkh0pv_Flags & V_MASK) != 0) {
+					ticks += 3;
+					push(regPC);
+					regPC = memptr = 0x0040;
 				}
 				break;
 			}
 			case 0xCC: {     /* CZ nn */
-				++ticks;
-				memptr = fetch16();
-				if ((sz5h3pnFlags & ZERO_MASK) != 0) {
+				ticks += 2;
+				if ((szkh0pv_Flags & ZERO_MASK) != 0) {
+					memptr = fetch16();
 					push(regPC);
 					regPC = memptr;
 					break;
 				}
+				regPC = (regPC + 2) & 0xffff;
+				ticks += 3;
 				break;
 			}
-			case 0xFD:	/* undocumented illegal */
-			case 0xED:	/* undocumented illegal */
-			case 0xDD:	/* undocumented illegal */
 			case 0xCD: {     /* CALL nn */
 				memptr = fetch16();
-				++ticks;
+				ticks += 2;
 				push(regPC);
 				regPC = memptr;
 				break;
@@ -1803,7 +1941,7 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0xD0: {     /* RNC */
-				++ticks;
+				ticks += 2;
 				if (!carryFlag) {
 					regPC = memptr = pop();
 				}
@@ -1825,18 +1963,20 @@ public class I8080 implements CPU {
 				int work8 = fetch8();
 				memptr = regA << 8;
 				computerImpl.outPort(memptr | work8, regA);
-				ticks += 3;
+				ticks += 4;
 				memptr |= ((work8 + 1) & 0xff);
 				break;
 			}
 			case 0xD4: {     /* CNC nn */
-				++ticks;
-				memptr = fetch16();
+				ticks += 2;
 				if (!carryFlag) {
+					memptr = fetch16();
 					push(regPC);
 					regPC = memptr;
 					break;
 				}
+				regPC = (regPC + 2) & 0xffff;
+				ticks += 3;
 				break;
 			}
 			case 0xD5: {     /* PUSH D */
@@ -1855,10 +1995,14 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0xD8: {     /* RC */
-				++ticks;
+				ticks += 2;
 				if (carryFlag) {
 					regPC = memptr = pop();
 				}
+				break;
+			}
+			case 0xD9: {	/* SHLX */
+				poke16(getRegDE(), getRegHL());
 				break;
 			}
 			case 0xDA: {     /* JC nn */
@@ -1872,16 +2016,26 @@ public class I8080 implements CPU {
 			case 0xDB: {     /* IN n */
 				memptr = (regA << 8) | fetch8();
 				regA = computerImpl.inPort(memptr++);
-				ticks += 3;
+				ticks += 4;
 				break;
 			}
 			case 0xDC: {     /* CC nn */
-				++ticks;
-				memptr = fetch16();
+				ticks += 2;
 				if (carryFlag) {
+					memptr = fetch16();
 					push(regPC);
 					regPC = memptr;
 					break;
+				}
+				regPC = (regPC + 2) & 0xffff;
+				ticks += 3;
+				break;
+			}
+			case 0xDD: {	/* JNK nn */
+				memptr = fetch16();
+				if ((szkh0pv_Flags & K_MASK) == 0) {
+					ticks += 3;
+					regPC = memptr;
 				}
 				break;
 			}
@@ -1896,8 +2050,8 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0xE0:       /* RPO */
-				++ticks;
-				if ((sz5h3pnFlags & PARITY_MASK) == 0) {
+				ticks += 2;
+				if ((szkh0pv_Flags & PARITY_MASK) == 0) {
 					regPC = memptr = pop();
 				}
 				break;
@@ -1906,7 +2060,7 @@ public class I8080 implements CPU {
 				break;
 			case 0xE2:       /* JPO nn */
 				memptr = fetch16();
-				if ((sz5h3pnFlags & PARITY_MASK) == 0) {
+				if ((szkh0pv_Flags & PARITY_MASK) == 0) {
 					regPC = memptr;
 					break;
 				}
@@ -1925,13 +2079,15 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0xE4:       /* CPO nn */
-				++ticks;
-				memptr = fetch16();
-				if ((sz5h3pnFlags & PARITY_MASK) == 0) {
+				ticks += 2;
+				if ((szkh0pv_Flags & PARITY_MASK) == 0) {
+					memptr = fetch16();
 					push(regPC);
 					regPC = memptr;
 					break;
 				}
+				regPC = (regPC + 2) & 0xffff;
+				ticks += 3;
 				break;
 			case 0xE5:       /* PUSH H */
 				++ticks;
@@ -1946,18 +2102,17 @@ public class I8080 implements CPU {
 				regPC = memptr = 0x20;
 				break;
 			case 0xE8:       /* RPE */
-				++ticks;
-				if ((sz5h3pnFlags & PARITY_MASK) != 0) {
+				ticks += 2;
+				if ((szkh0pv_Flags & PARITY_MASK) != 0) {
 					regPC = memptr = pop();
 				}
 				break;
 			case 0xE9:       /* PCHL */
-				++ticks;
 				regPC = getRegHL();
 				break;
 			case 0xEA:       /* JPE nn */
 				memptr = fetch16();
-				if ((sz5h3pnFlags & PARITY_MASK) != 0) {
+				if ((szkh0pv_Flags & PARITY_MASK) != 0) {
 					regPC = memptr;
 					break;
 				}
@@ -1973,14 +2128,20 @@ public class I8080 implements CPU {
 				break;
 			}
 			case 0xEC:       /* CPE nn */
-				++ticks;
-				memptr = fetch16();
-				if ((sz5h3pnFlags & PARITY_MASK) != 0) {
+				ticks += 2;
+				if ((szkh0pv_Flags & PARITY_MASK) != 0) {
+					memptr = fetch16();
 					push(regPC);
 					regPC = memptr;
 					break;
 				}
+				regPC = (regPC + 2) & 0xffff;
+				ticks += 3;
 				break;
+			case 0xED: {	/* LHLX */
+				setRegHL(peek16(getRegDE()));
+				break;
+			}
 			case 0xEE:       /* XRI n */
 				xor(fetch8());
 				break;
@@ -1990,8 +2151,8 @@ public class I8080 implements CPU {
 				regPC = memptr = 0x28;
 				break;
 			case 0xF0:       /* RP */
-				++ticks;
-				if (sz5h3pnFlags < SIGN_MASK) {
+				ticks += 2;
+				if (szkh0pv_Flags < SIGN_MASK) {
 					regPC = memptr = pop();
 				}
 				break;
@@ -2000,22 +2161,24 @@ public class I8080 implements CPU {
 				break;
 			case 0xF2:       /* JP nn */
 				memptr = fetch16();
-				if (sz5h3pnFlags < SIGN_MASK) {
+				if (szkh0pv_Flags < SIGN_MASK) {
 					regPC = memptr;
 					break;
 				}
 				break;
 			case 0xF3:       /* DI */
-				ffIE = false;
+				setEI(false);
 				break;
 			case 0xF4:       /* CP nn */
-				++ticks;
-				memptr = fetch16();
-				if (sz5h3pnFlags < SIGN_MASK) {
+				ticks += 2;
+				if (szkh0pv_Flags < SIGN_MASK) {
+					memptr = fetch16();
 					push(regPC);
 					regPC = memptr;
 					break;
 				}
+				regPC = (regPC + 2) & 0xffff;
+				ticks += 3;
 				break;
 			case 0xF5:       /* PUSH PSW */
 				++ticks;
@@ -2030,35 +2193,43 @@ public class I8080 implements CPU {
 				regPC = memptr = 0x30;
 				break;
 			case 0xF8:       /* RM */
-				++ticks;
-				if (sz5h3pnFlags > 0x7f) {
+				ticks += 2;
+				if (szkh0pv_Flags > 0x7f) {
 					regPC = memptr = pop();
 				}
 				break;
 			case 0xF9:       /* SPHL */
-				++ticks;
+				ticks += 2;
 				regSP = getRegHL();
 				break;
 			case 0xFA:       /* JM nn */
 				memptr = fetch16();
-				if (sz5h3pnFlags > 0x7f) {
+				if (szkh0pv_Flags > 0x7f) {
 					regPC = memptr;
 					break;
 				}
 				break;
 			case 0xFB:       /* EI */
-				ffIE = true;
+				setEI(true);
 				pendingEI = true;
 				break;
 			case 0xFC:       /* CALL M,nn */
 				memptr = fetch16();
-				if (sz5h3pnFlags > 0x7f) {
+				if (szkh0pv_Flags > 0x7f) {
 					++ticks;
 					push(regPC);
 					regPC = memptr;
 					break;
 				}
 				break;
+			case 0xFD: {	/* JK nn */
+				memptr = fetch16();
+				if ((szkh0pv_Flags & K_MASK) != 0) {
+					ticks += 3;
+					regPC = memptr;
+				}
+				break;
+			}
 			case 0xFE:       /* CPI n */
 				cp(fetch8());
 				break;
@@ -2072,21 +2243,23 @@ public class I8080 implements CPU {
 
 	public String dumpDebug() {
 		String s = new String();
-		s += String.format("INT=%s IE=%s\n",
-				isINTLine(), isIE());
+		s += String.format("INT=%s IE=%s TRAP=%s\n" +
+				"I5.5=%s I6.5=%s I7.5=%s\n",
+				isINTLine(), isIE(), activeTRAP,
+				isRST5_5Line(), isRST6_5Line(), isRST7_5Line());
 		s += String.format("PC=%04x SP=%04x\n",
 				getRegPC(), getRegSP());
 		s += String.format("HL=%04x DE=%04x BC=%04x\n", getRegHL(), getRegDE(), getRegBC());
-		s += String.format("A=%02x F=%s%s%s%s%s%s%s%s\n", regA,
-			(sz5h3pnFlags & SIGN_MASK) == 0 ? "s" : "S",
-			(sz5h3pnFlags & ZERO_MASK) == 0 ? "z" : "Z",
+		s += String.format("A=%02x F=%s%s%s%s%s%s%s%s IM=$02x\n", regA,
+			(szkh0pv_Flags & SIGN_MASK) == 0 ? "s" : "S",
+			(szkh0pv_Flags & ZERO_MASK) == 0 ? "z" : "Z",
+			(szkh0pv_Flags & K_MASK) == 0 ? "k" : "K",
+			(szkh0pv_Flags & HALFCARRY_MASK) == 0 ? "h" : "H",
 			".",
-			(sz5h3pnFlags & HALFCARRY_MASK) == 0 ? "h" : "H",
-			".",
-			(sz5h3pnFlags & PARITY_MASK) == 0 ? "p" : "P",
-			"1",
-			carryFlag ? "c" : "C"
-			);
+			(szkh0pv_Flags & PARITY_MASK) == 0 ? "p" : "P",
+			(szkh0pv_Flags & V_MASK) == 0 ? "v" : "V",
+			carryFlag ? "c" : "C",
+			regIM);
 		return s;
 	}
 }
