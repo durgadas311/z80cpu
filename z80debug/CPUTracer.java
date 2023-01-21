@@ -35,7 +35,7 @@ public abstract class CPUTracer {
 	private boolean tracing = false;
 
 	// TODO: support changing tracing after ctor?
-	protected CPUTracer(Properties props, String args) {
+	protected CPUTracer(Properties props, String pfx, String args) {
 		// TODO: any properties?
 		setTrace(args);
 	}

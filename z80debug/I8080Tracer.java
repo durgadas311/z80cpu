@@ -10,7 +10,7 @@ public class I8080Tracer extends CPUTracer {
 	private Memory mem;
 
 	public I8080Tracer(Properties props, String pfx, CPU cpu, Memory mem, String args) {
-		super(props, args);
+		super(props, pfx, args);
 		this.cpu = (I8080)cpu;
 		this.mem = mem;
 		disas = new I8080Disassembler(mem);

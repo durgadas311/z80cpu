@@ -10,10 +10,15 @@ public class Z180Tracer extends CPUTracer {
 	private Memory mem;
 
 	public Z180Tracer(Properties props, String pfx, CPU cpu, Memory mem, String args) {
-		super(props, args);
+		super(props, pfx, args);
 		this.cpu = (Z180)cpu;
 		this.mem = mem;
-		String s = props.getProperty(pfx + "disas");
+		String s;
+		if (pfx != null) {
+			s = props.getProperty(pfx + "_disas");
+		} else {
+			s = props.getProperty("disas");
+		}
 		if (s != null && s.equalsIgnoreCase("zilog")) {
 			disas = new Z180DisassemblerZilog(mem, this.cpu);
 		} else {

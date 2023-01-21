@@ -10,10 +10,15 @@ public class Z80Tracer extends CPUTracer {
 	private Memory mem;
 
 	public Z80Tracer(Properties props, String pfx, CPU cpu, Memory mem, String args) {
-		super(props, args);
+		super(props, pfx, args);
 		this.cpu = (Z80)cpu;
 		this.mem = mem;
-		String s = props.getProperty(pfx + "_disas");
+		String s;
+		if (pfx != null) {
+			s = props.getProperty(pfx + "_disas");
+		} else {
+			s = props.getProperty("disas");
+		}
 		if (s != null && s.equalsIgnoreCase("zilog")) {
 			disas = new Z80DisassemblerZilog(mem);
 		} else {
