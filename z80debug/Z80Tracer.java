@@ -8,15 +8,12 @@ import z80core.*;
 public class Z80Tracer extends CPUTracer {
 	private Z80 cpu;
 	private Memory mem;
-	private CPUDisassembler disas;
-	private String traceStr;
 
-	public Z80Tracer(Properties props, CPU cpu, Memory mem, String args) {
+	public Z80Tracer(Properties props, String pfx, CPU cpu, Memory mem, String args) {
 		super(props, args);
 		this.cpu = (Z80)cpu;
 		this.mem = mem;
-		// TODO: prefix property with "vcpm_"?
-		String s = props.getProperty("disas");
+		String s = props.getProperty(pfx + "_disas");
 		if (s != null && s.equalsIgnoreCase("zilog")) {
 			disas = new Z80DisassemblerZilog(mem);
 		} else {
@@ -45,7 +42,7 @@ public class Z80Tracer extends CPUTracer {
 		}
 		// No interrupt state (etc) in this machine.
 		traceStr = String.format("{%05d} %04x: %02x %02x %02x %02x " +
-				": %s %02x %04x %04x %04x %04x %04x [%04x] {%%d} %s\n",
+				": %s %02x %04x %04x %04x %04x %04x [%04x]",
 			clk & 0xffff,
 			pc, mem.read(pc), mem.read(pc + 1),
 			mem.read(pc + 2), mem.read(pc + 3),
@@ -56,15 +53,17 @@ public class Z80Tracer extends CPUTracer {
 			cpu.getRegHL(),
 			cpu.getRegIX(),
 			cpu.getRegIY(),
-			cpu.getRegSP(),
-			disas.disas(pc));
-		// TODO: keep 'tracing' state ourselves?
+			cpu.getRegSP());
+		// do this now in case of corruption?
+		instr = disas.disas(pc);
 		return true;
 	}
 	// after cpu.execute()... only called if preTrace() was true?
-	public void postTrace(int pc, int cy) {
-		System.err.format(traceStr, cy);
-		didTrace(pc, cy);
+	public void postTrace(int pc, int cy, String xt) {
+		if (cy < 0) {
+			instr = "*" + cpu.specialCycle() + "*";
+		}
+		didTrace(pc, cy, xt);
 	}
 }
 

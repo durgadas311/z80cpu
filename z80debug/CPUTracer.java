@@ -23,6 +23,9 @@ import java.util.Properties;
 //	All addresses are in hexadecimal.
 
 public abstract class CPUTracer {
+	public CPUDisassembler disas;
+	protected String traceStr;
+	protected String instr;
 	private int traceLow = 0;
 	private int traceHigh = 0;
 	private int traceCount = 0;
@@ -33,14 +36,27 @@ public abstract class CPUTracer {
 
 	// TODO: support changing tracing after ctor?
 	protected CPUTracer(Properties props, String args) {
+		// TODO: any properties?
+		setTrace(args);
+	}
+
+	public void setTrace(String args) {
+		if (args == null || args.length() == 0) {
+			return;
+		}
 		String[] argv = args.split("\\s");
 		int x;
 
-		if (args.length() == 0 || argv.length < 1) {
+		if (argv.length < 1) {
 			return;
 		}
+		// start with everythign off
+		count = traceCount = traceHigh = traceLow = 0;
+		tracing = traceOnce = false;
 		if (argv[0].indexOf(":") < 0) {
-			if (argv[0].equals(".")) {
+			if (argv[0].equals("off")) {
+				// already off
+			} else if (argv[0].equals(".")) {
 				traceHigh = traceLow = 0;
 				tracing = true;
 				// next instruction will trigger count
@@ -69,7 +85,7 @@ public abstract class CPUTracer {
 			}
 		}
 		// System.err.format("trace %04x %04x %d %s\n",
-		//	traceLow, traceHigh, traceCount, traceOnce);
+		// 	traceLow, traceHigh, traceCount, traceOnce);
 	}
 
 	protected boolean shouldTrace(int pc) {
@@ -84,14 +100,23 @@ public abstract class CPUTracer {
 		return tracing || (count > 0);
 	}
 
-	protected void didTrace(int pc, int cy) {
+	protected void didTrace(int pc, int cy, String xt) {
 		if (count > 0) {
 			--count;
 		}
+		if (xt != null) {
+			traceStr += ' ';
+			traceStr += xt;
+		}
+		traceStr += " {%d} ";
+		traceStr += instr;
+		traceStr += '\n';
+		System.err.format(traceStr, cy < 0 ? -cy : cy);
+
 	}
 
 	// before cpu.execute()...
 	public abstract boolean preTrace(int pc, long clk);
 	// after cpu.execute()...
-	public abstract void postTrace(int pc, int cy);
+	public abstract void postTrace(int pc, int cy, String xt);
 }
