@@ -11,6 +11,17 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.Properties;
 
+// Trace commands
+//	. <count>
+//	<addr> [<count>] [oneshot]
+//	<low>:<high> [<count>] [oneshot]
+// Where:
+//	'.' means immediate, one-time, trigger of <count>.
+//	<low> defaults to 0000.
+//	<high> defaults to FFFF+1.
+//	'oneshot' causes tracing to disable of completing first trigger.
+//	All addresses are in hexadecimal.
+
 public abstract class CPUTracer {
 	private int traceLow = 0;
 	private int traceHigh = 0;
@@ -29,8 +40,14 @@ public abstract class CPUTracer {
 			return;
 		}
 		if (argv[0].indexOf(":") < 0) {
-			traceLow = Integer.valueOf(argv[0], 16);
-			traceHigh = traceLow + 1;
+			if (argv[0].equals(".")) {
+				traceHigh = traceLow = 0;
+				tracing = true;
+				// next instruction will trigger count
+			} else {
+				traceLow = Integer.valueOf(argv[0], 16);
+				traceHigh = traceLow + 1;
+			}
 		} else {
 			String[] range = argv[0].split(":");
 			if (range.length == 0 || range[0].length() == 0) {

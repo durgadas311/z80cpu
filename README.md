@@ -37,3 +37,6 @@ opcode byte, to indicate a RETI/RETN instruction is being executed.
 
 z80cpu.jar is included, but may be rebuilt using "make" in the top-level
 directory.
+
+A disassembler/tracer framework is included in z80debug.jar.
+See comments in z80debug/CPUTracer.java for trace commands.
