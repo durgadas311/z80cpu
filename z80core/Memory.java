@@ -1,6 +1,6 @@
 // Copyright (c) 2016 Douglas Miller <durgadas311@gmail.com>
 
-package z80debug;
+package z80core;
 
 public interface Memory {
 	int read(boolean rom, int bank, int address); // debugger interface

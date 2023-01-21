@@ -4,6 +4,8 @@
 
 package z80debug;
 
+import z80core.Memory;
+
 public class I8085Disassembler implements CPUDisassembler {
 	Memory mem;
 	boolean rom;
