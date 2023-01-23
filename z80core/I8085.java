@@ -92,6 +92,9 @@ public class I8085 implements CPU {
 		execDone = false;
 		Arrays.fill(breakpointAt, false);
 		reset();
+		if (siod != null) {
+			siod.setCPU(this);
+		}
 	}
 
 	public final int getRegA() {

@@ -5,7 +5,7 @@
 package z80core;
 
 public interface ComputerIO {
-	void setCPU(Z180 cpu);
+	void setCPU(CPU cpu);
 	int inPort(int port);
 	void outPort(int port, int value);
 }
