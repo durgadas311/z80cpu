@@ -46,6 +46,9 @@ public interface CPU {
 	int getRegI();
 	int getRegR();
 	//
+	void setCarryFlag(boolean state);
+	boolean isCarryFlag();
+	//
 	void reset();
 	boolean isIE();
 	boolean isINTLine();
